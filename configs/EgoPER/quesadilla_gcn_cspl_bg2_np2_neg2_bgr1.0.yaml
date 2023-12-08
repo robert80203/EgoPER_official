@@ -1,0 +1,48 @@
+dataset_name: EgoPER
+train_split: training
+val_split: validation
+test_split: test
+model_name: LocPointTransformer_CSPL_GCN
+dataset: {
+  num_classes: 9,
+  trunc_thresh: 0.5,
+  crop_ratio: [0.9, 1.0],
+  max_seq_len: 2304,
+  background_ratio: 1.0,
+  use_gcn: True,
+  task: quesadilla
+}
+model: {
+  fpn_type: identity,
+  backbone_type: convGCNTransformer,
+  max_buffer_len_factor: 6.0,
+  n_mha_win_size: 19,
+  num_normal_clusters: 2,
+}
+opt: {
+  learning_rate: 0.001,
+  epochs: 150,
+  weight_decay: 0.05,
+  schedule_gamma: 0.7,
+}
+loader: {
+  batch_size: 2,
+}
+train_cfg: {
+  init_loss_norm: 100,
+  clip_grad_l2norm: 1.0,
+  cls_prior_prob: 0.01,
+  center_sample: radius,
+  center_sample_radius: 1.5,
+  contrastive: True,
+  cl_weight: 0.1,
+  num_negative_segments: 2,
+}
+test_cfg: {
+  voting_thresh: 0.7,
+  pre_nms_topk: 2000,
+  max_seg_num: 200,
+  min_score: 0.001,
+  multiclass_nms: True,
+}
+output_folder: ./ckpt/EgoPER/
