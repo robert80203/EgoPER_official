@@ -196,14 +196,14 @@ class ActionSegmentationErrorDetectionEvaluator:
         self.annotations = {}
         self.step_annotations = {}
         task = args.task
-        root_dir = '/mnt/raptor/shihpo'
+        root_dir = '/mnt/raptor/datasets/EgoPER'
         if args.dataset == 'EgoPER':
             with open(os.path.join(root_dir, args.task, 'test.txt'), 'r') as fp:
                 lines = fp.readlines()
                 self.data_list = [line.strip('\n') for line in lines]
-            with open(os.path.join(root_dir, 'EgoPER/preprocess/annotation.json'), 'r') as fp:
+            with open(os.path.join(root_dir, 'annotation.json'), 'r') as fp:
                 all_annot = json.load(fp)
-            with open(os.path.join(root_dir, 'EgoPER/preprocess/action_step.json'), 'r') as fp:
+            with open(os.path.join(root_dir, 'action_step.json'), 'r') as fp:
                 all_step_annot = json.load(fp)
             step_annot = all_step_annot[task]
             for i in range(len(step_annot)):
@@ -214,7 +214,7 @@ class ActionSegmentationErrorDetectionEvaluator:
             with open(os.path.join(root_dir, 'holoassist', 'test.txt'), 'r') as fp:
                 lines = fp.readlines()
                 self.data_list = [line.strip('\n') for line in lines]
-            with open(os.path.join(root_dir, 'EgoPER/preprocess/holoassist_annotation.json'), 'r') as fp:
+            with open(os.path.join(root_dir, 'HoloAssist' 'holoassist_annotation.json'), 'r') as fp:
                 all_annot = json.load(fp)
 
         annot = all_annot[task]
