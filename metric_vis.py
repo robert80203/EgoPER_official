@@ -10,53 +10,85 @@ from sklearn.metrics import f1_score, recall_score
 from sklearn.metrics import precision_score, accuracy_score
 from sklearn.metrics import auc
 from libs.datasets.data_utils import generate_time_stamp_labels, to_frame_wise, to_segments
-# from action_segmentation_eval import Video, Checkpoint
-# from eval_omission_error import eval_omission_error_ordering
 from eval_utils import Video, Checkpoint, eval_omission_error
 
-def error_acc(pred, gt, gt_error, bg_to_normal = None):
-    if bg_to_normal is not None:
-        pred[pred == bg_to_normal[0]] = bg_to_normal[1]
-        gt_error[gt_error == bg_to_normal[0]] = bg_to_normal[1]
+# strict version
+# def error_acc(pred, gt, gt_error):
     
+#     num_correct = 0
+#     num_total = 0
+#     pre_gt = None
+#     pre_gt_error = None
+#     is_pred_error = False
+#     idx = 0
+#     for i in range(len(gt)):
+#         if pre_gt is None:
+#             pre_gt = gt[i]
+#             is_pre_gt_error = True if gt_error[i] == -1 else False
+        
+#         if pred[i] == -1:
+#             is_pred_error = True
+        
+
+#         if pre_gt != gt[i]:
+#             if is_pred_error and is_pre_gt_error:
+#                 num_correct += 1
+#             elif not is_pred_error and not is_pre_gt_error:
+#                 num_correct += 1
+#             is_pred_error = False
+#             pre_gt = gt[i]
+#             is_pre_gt_error = True if gt_error[i] == -1 else False
+#             num_total += 1
+
+#     if is_pred_error and is_pre_gt_error:
+#         num_correct += 1
+#     elif not is_pred_error and not is_pre_gt_error:
+#         num_correct += 1
+#     num_total += 1
+
+#     return num_correct, num_total
+
+# loose version
+def error_acc(pred, gt, gt_error):
     num_correct = 0
     num_total = 0
+    num_error = 0
+    num_nonerror = 0 
     pre_gt = None
     pre_gt_error = None
     is_pred_error = False
-    idx = 0
     for i in range(len(gt)):
         if pre_gt is None:
             pre_gt = gt[i]
             is_pre_gt_error = True if gt_error[i] == -1 else False
-        
+
         if pred[i] == -1:
             is_pred_error = True
-        
+            num_error += 1
+        else:
+            num_nonerror += 1
 
         if pre_gt != gt[i]:
-            if is_pred_error and is_pre_gt_error:
+            if is_pred_error and is_pre_gt_error and num_error > num_nonerror:
                 num_correct += 1
-            elif not is_pred_error and not is_pre_gt_error:
+            elif (not is_pred_error and not is_pre_gt_error) or num_error < num_nonerror:
                 num_correct += 1
             is_pred_error = False
             pre_gt = gt[i]
             is_pre_gt_error = True if gt_error[i] == -1 else False
+            num_error = 0
+            num_nonerror = 0
             num_total += 1
 
-    if is_pred_error and is_pre_gt_error:
+    if is_pred_error and is_pre_gt_error and num_error > num_nonerror:
         num_correct += 1
-    elif not is_pred_error and not is_pre_gt_error:
+    elif (not is_pred_error and not is_pre_gt_error) or num_error < num_nonerror:
         num_correct += 1
     num_total += 1
 
     return num_correct, num_total
 
-def acc_tpr_fpr(all_preds, all_gts, set_labels, bg_to_normal = None):
-    if bg_to_normal is not None:
-        all_preds[all_preds == bg_to_normal[0]] = bg_to_normal[1]
-        all_gts[all_gts == bg_to_normal[0]] = bg_to_normal[1]
-
+def acc_tpr_fpr(all_preds, all_gts):
     # fpr = fp / (fp + tn)
     all_gt_normal = all_preds[all_gts == 1] # get predicted non-error items
     fp_tn = len(all_gt_normal) # number of total non-error items in the ground truth
@@ -88,15 +120,11 @@ def acc_tpr_fpr(all_preds, all_gts, set_labels, bg_to_normal = None):
     
     return acc, tpr, fpr
 
-def acc_precision_recall_f1(all_preds, all_gts, set_labels, each_class = True, bg_to_normal = None):
-    if bg_to_normal is not None:
-        all_preds[all_preds == bg_to_normal[0]] = bg_to_normal[1]
-        all_gts[all_gts == bg_to_normal[0]] = bg_to_normal[1]
-
+def acc_precision_recall_f1(all_preds, all_gts, each_class = True):
     if each_class:
         method = None
         acc = None
-        for j in set_labels:
+        for j in self.set_labels:
             each_acc = torch.eq(torch.LongTensor(all_gts[all_gts == j]), torch.LongTensor(all_preds[all_gts == j])).sum() / len(all_gts[all_gts == j])
             if acc is None:
                 acc = each_acc.unsqueeze(0)
@@ -105,8 +133,8 @@ def acc_precision_recall_f1(all_preds, all_gts, set_labels, each_class = True, b
     else:
         method = 'macro'
         acc = torch.eq(torch.LongTensor(all_gts), torch.LongTensor(all_preds)).sum() / len(all_gts)
-    p = precision_score(all_gts, all_preds, labels=set_labels, average=method,zero_division=0)
-    r = recall_score(all_gts, all_preds, labels=set_labels, average=method,zero_division=0)
+    p = precision_score(all_gts, all_preds, labels=self.set_labels, average=method,zero_division=0)
+    r = recall_score(all_gts, all_preds, labels=self.set_labels, average=method,zero_division=0)
 
     f1 = 2 * p * r / (p + r)
     
@@ -121,31 +149,17 @@ def generate_partitions(inputs):
             step_partitions.append((cur_class, i - start + 1))
             start = i + 1
         cur_class = inputs[i]
-    # last partition
-    #if inputs[len(inputs) - 1] != background_idx:
     step_partitions.append((inputs[len(inputs) - 1], len(inputs) - start + 1))
     return step_partitions
 
 def pred_vis(all_gts, all_preds, mapping, vname, category_colors=None):
-    #print(all_gts)
-    #print(all_preds)
-    ## convert frames to partitions
-    #pred_error_partitions = convert_frame2partition(pred_error_frames)
-    #gt_error_partitions = convert_frame2partition(gt_error_frames)
     clean_version = True
     gts = all_gts
     preds = all_preds
-    
-    #print(preds.size())
-    #category_colors = plt.matplotlib.cm.get_cmap('tab10')(np.arange(len(mapping))) #plt.matplotlib.cm.get_cmap('PiYG')(np.linspace(0.15, 0.85, len(mapping)))
-    
 
     if category_colors is None:
         mycmap = plt.matplotlib.cm.get_cmap('rainbow', len(mapping))
         category_colors = [matplotlib.colors.rgb2hex(mycmap(i)) for i in range(mycmap.N)]
-    
-
-    # print(category_colors)
 
     gt_partitions = generate_partitions(gts)
           
@@ -155,23 +169,18 @@ def pred_vis(all_gts, all_preds, mapping, vname, category_colors=None):
     data_cum = 0
     for i, (l, w) in enumerate(gt_partitions):
         if clean_version:
-            # print(l, end=' ')
             rects = plt.barh('gt_segmentation', w, left=data_cum, height=0.5, color=category_colors[l.item()])
         else:
             rects = plt.barh('gt_segmentation', w, left=data_cum, height=0.5,
                             label=mapping[str(l.item())], color=category_colors[l.item()])
-            text_color = 'black'#'white' if r * g * b < 0.5 else 'darkgrey'
+            text_color = 'black'
             plt.bar_label(rects, labels = [l.item()], label_type='center', color=text_color)
         data_cum += w
-    
-    # print()
+
     if not clean_version:
         handles, labels = plt.gca().get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
         plt.legend(by_label.values(), by_label.keys(), ncol=1, bbox_to_anchor=(1, -1), loc='lower left', fontsize='small')
-    
-    
-    #plt.legend(ncol=2, bbox_to_anchor=(1, -2), loc='lower left', fontsize='small')
 
     plt.subplot(212)
     pred_partitions = generate_partitions(preds)
@@ -182,7 +191,7 @@ def pred_vis(all_gts, all_preds, mapping, vname, category_colors=None):
         else:
             rects = plt.barh('pred_segmentation', w, left=data_cum, height=0.5,
                         label=mapping[str(l.item())], color=category_colors[l.item()])
-            text_color = 'black'#'white' if r * g * b < 0.5 else 'darkgrey'
+            text_color = 'black'
             plt.bar_label(rects, labels = [l.item()], label_type='center', color=text_color)
         
         data_cum += w
@@ -203,13 +212,13 @@ class ActionSegmentationErrorDetectionEvaluator:
                 self.data_list = [line.strip('\n') for line in lines]
             with open(os.path.join(root_dir, 'annotation.json'), 'r') as fp:
                 all_annot = json.load(fp)
-            with open(os.path.join(root_dir, 'action_step.json'), 'r') as fp:
-                all_step_annot = json.load(fp)
-            step_annot = all_step_annot[task]
-            for i in range(len(step_annot)):
-                video_id = step_annot[i]['video_id']
-                if video_id in self.data_list:
-                    self.step_annotations[video_id] = step_annot[i]['steps']
+            # with open(os.path.join(root_dir, 'action_step.json'), 'r') as fp:
+            #     all_step_annot = json.load(fp)
+            # step_annot = all_step_annot[task]
+            # for i in range(len(step_annot)):
+            #     video_id = step_annot[i]['video_id']
+            #     if video_id in self.data_list:
+            #         self.step_annotations[video_id] = step_annot[i]['steps']
         elif args.dataset == 'HoloAssist':
             with open(os.path.join(root_dir, 'holoassist', 'test.txt'), 'r') as fp:
                 lines = fp.readlines()
@@ -236,21 +245,11 @@ class ActionSegmentationErrorDetectionEvaluator:
             self.idx2action[int(value)] = key
         self.set_labels = [i for i in range(len(action2idx))]
 
-    # updated
-    def macro_segment_error_detection(self, output_list=None, threshold=None, combine_bg=False, is_visualize=False):
-        
-        # with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, 'eval_results.pkl'), "rb") as f:
-        #     results = pickle.load(f)
+    # EDA
+    def macro_segment_error_detection(self, output_list=None, threshold=None, is_visualize=False):
+
         with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, "pred_seg_results_%.2f.pkl"%(threshold)), "rb") as f:
             results = pickle.load(f)
-
-        # if convert bg into normal class
-        if combine_bg:
-            bg_to_normal = [0, 1]
-            set_labels = [1, -1]
-        else:
-            bg_to_normal = None
-            set_labels = [0, 1, -1]
 
         preds = None
         gts = None
@@ -266,7 +265,8 @@ class ActionSegmentationErrorDetectionEvaluator:
             gt_error = to_frame_wise(gt_segments, gt_label_types, None, length)
 
             # convert all error types to -1
-            gt_error[gt_error > 1] = -1
+            gt_error[gt_error > 0] = -1
+            gt_error[gt_error == 0] = 1
 
             segments = torch.tensor(results[video_id]['segments'])
             labels = torch.tensor(results[video_id]['label'])
@@ -274,11 +274,10 @@ class ActionSegmentationErrorDetectionEvaluator:
 
             pred = to_frame_wise(segments, labels, None, length)
 
-
             # convert all normal classes to 1
-            pred[pred > 1] = 1
+            pred[pred >= 0] = 1
 
-            num_correct, num_total = error_acc(pred, gt, gt_error, bg_to_normal)
+            num_correct, num_total = error_acc(pred, gt, gt_error)
             
             total_correct += num_correct
             total += num_total
@@ -289,32 +288,26 @@ class ActionSegmentationErrorDetectionEvaluator:
         else:
             print("|Error detection accuracy|%.3f|"%(total_correct / total))
 
-    # updated
-    def micro_framewise_error_detection(self, output_list=None, threshold=None, eval_each_class=False, combine_bg=False, is_visualize=False):
+    # Micro AUC
+    def micro_framewise_error_detection(self, output_list=None, threshold=None, is_visualize=False):
         
         with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, "pred_seg_results_%.2f.pkl"%(threshold)), "rb") as f:
             results = pickle.load(f)
 
-        # if convert bg into normal class
-        if combine_bg:
-            bg_to_normal = [0, 1]
-            set_labels = [1, -1]
-        else:
-            bg_to_normal = None
-            set_labels = [0, 1, -1]
-
         preds = None
         gts = None
+
         for video_id in self.data_list:
             
             gt_segments, gt_labels, gt_label_types, gt_des = self.annotations[video_id]
             
             length = int(gt_segments[-1, 1])
 
-            gt = to_frame_wise(gt_segments, gt_label_types, None, length)
+            gt_error = to_frame_wise(gt_segments, gt_label_types, None, length)
             
             # convert all error types to -1
-            gt[gt > 1] = -1
+            gt_error[gt_error > 0] = -1
+            gt_error[gt_error == 0] = 1
 
             segments = torch.tensor(results[video_id]['segments'])
             labels = torch.tensor(results[video_id]['label'])
@@ -324,39 +317,30 @@ class ActionSegmentationErrorDetectionEvaluator:
             pred = to_frame_wise(segments, labels, None, length)
 
             # convert all normal classes to 1
-            pred[pred > 1] = 1
+            pred[pred >= 0] = 1
 
             if preds is None:
                 preds = pred
-                gts = gt
+                gts = gt_error
             else:
                 preds = torch.cat((preds, pred), dim=0)
-                gts = torch.cat((gts, gt), dim=0)
+                gts = torch.cat((gts, gt_error), dim=0)
 
             if is_visualize:
                 if not os.path.exists(os.path.join('./visualization/', self.args.dataset, self.args.dirname)):
                     os.mkdir(os.path.join('./visualization/', self.args.dataset, self.args.dirname))
-                cp_gt = np.copy(gt)
+                cp_gt = np.copy(gt_error)
                 cp_pred = np.copy(pred)
-                if bg_to_normal is not None:
-                    cp_gt[cp_gt == bg_to_normal[0]] = bg_to_normal[1]
-                    cp_pred[cp_pred == bg_to_normal[0]] = bg_to_normal[1]
-                    category_colors = {
-                        -1: 'r',
-                        1: 'g'
-                    }
-                else:
-                    category_colors = {
-                        -1: 'r',
-                        0: 'purple',
-                        1: 'g'
-                    }
+                category_colors = {
+                    1: 'g',
+                    -1: 'r'
+                }
                 if threshold >= -1.0 and threshold <= 1.0:
                     if not os.path.exists(os.path.join('./visualization/', self.args.dataset, self.args.dirname, 'threshold%.1f'%(threshold))):
                         os.mkdir(os.path.join('./visualization/', self.args.dataset, self.args.dirname, 'threshold%.1f'%(threshold)))
                     pred_vis(cp_gt, cp_pred, self.idx2action, os.path.join('./visualization/', self.args.dataset, self.args.dirname, 'threshold%.1f'%(threshold), 'ed_'+ video_id), category_colors=category_colors)
         
-        final_acc, final_tpr, final_fpr = acc_tpr_fpr(preds, gts, set_labels, bg_to_normal)
+        final_acc, final_tpr, final_fpr = acc_tpr_fpr(preds, gts)
 
         if output_list is not None:
             output_list['acc'].append(final_acc)
@@ -366,19 +350,11 @@ class ActionSegmentationErrorDetectionEvaluator:
         else:
             print("|Error detection (thres=%.3f, micro)|acc=%.3f|fpr=%.3f|tpr=%.3f|"%(threshold, final_acc, final_fpr, final_tpr))
         
-    # updated
-    def macro_framewise_error_detection(self, output_list=None, threshold=None, eval_each_class=False, combine_bg=False, is_visualize=False):
+    # Macro AUC
+    def macro_framewise_error_detection(self, output_list=None, threshold=None, is_visualize=False):
         
         with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, "pred_seg_results_%.2f.pkl"%(threshold)), "rb") as f:
             results = pickle.load(f)
-
-        # if convert bg into normal class
-        if combine_bg:
-            bg_to_normal = [0, 1]
-            set_labels = [1, -1]
-        else:
-            bg_to_normal = None
-            set_labels = [0, 1, -1]
 
         preds = None
         gts = None
@@ -391,10 +367,11 @@ class ActionSegmentationErrorDetectionEvaluator:
             
             length = int(gt_segments[-1, 1])
 
-            gt = to_frame_wise(gt_segments, gt_label_types, None, length)
+            gt_error = to_frame_wise(gt_segments, gt_label_types, None, length)
             
             # convert all error types to -1
-            gt[gt > 1] = -1
+            gt_error[gt_error > 0] = -1
+            gt_error[gt_error == 0] = 1
 
             segments = torch.tensor(results[video_id]['segments'])
             labels = torch.tensor(results[video_id]['label'])
@@ -403,9 +380,9 @@ class ActionSegmentationErrorDetectionEvaluator:
             pred = to_frame_wise(segments, labels, None, length)
             
             # convert all normal classes to 1
-            pred[pred > 1] = 1
+            pred[pred >= 0] = 1
 
-            acc, tpr, fpr = acc_tpr_fpr(pred, gt, set_labels, bg_to_normal)
+            acc, tpr, fpr = acc_tpr_fpr(pred, gt_error)
 
             acc_list.append(acc)
             tpr_list.append(tpr)
@@ -423,7 +400,7 @@ class ActionSegmentationErrorDetectionEvaluator:
         else:
             print("|Error detection (thres=%.3f, macro)|acc=%.3f|fpr=%.3f|tpr=%.3f|"%(threshold, final_acc, final_fpr, final_tpr))
 
-    # updated
+    # Accuracy, Precision, Recall F1 of Action Segmentation
     def micro_framewise_action_segmentation(self, eval_each_class=True, is_visualize=False):
         
         with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, 'eval_results.pkl'), "rb") as f:
@@ -442,22 +419,8 @@ class ActionSegmentationErrorDetectionEvaluator:
             segments = torch.tensor(results[video_id]['segments'])
             labels = torch.tensor(results[video_id]['label'])
             scores = torch.tensor(results[video_id]['score'])
-
-
             pred = to_frame_wise(segments, labels, None, length)
-            # if len(scores) != len(segments):
-            #     pred = to_frame_wise(segments, labels, None, length)
-            # else:
-            #     pred = to_frame_wise(segments, labels, scores, length)
 
-            # pred_steps, _ = to_segments(pred)
-            # gt_steps, _ = to_segments(gt)
-            # print(video_id)
-            # print('pred', pred_steps)
-            # print('gt from annot', gt_steps)
-            # print('gt from seq', self.step_annotations[video_id])
-            # print('=======================')
-            
             if preds is None:
                 preds = pred
                 gts = gt
@@ -480,7 +443,7 @@ class ActionSegmentationErrorDetectionEvaluator:
         else:
             print("|Action segmentation (cls head, macro)|%.3f|%.3f|%.3f|%.3f|"%(p, r, f1, acc))
         
-    # updated
+    # IoU, Edit distance, F1@0.5, Accuracy of Action Segmentation
     def standard_action_segmentation(self):
         
         with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, 'eval_results.pkl'), "rb") as f:
@@ -495,7 +458,7 @@ class ActionSegmentationErrorDetectionEvaluator:
             gt_segments, gt_labels, gt_label_types, gt_des = self.annotations[video_id]
             
             length = int(gt_segments[-1, 1])
-            # print(gt_segments)
+
             gt = to_frame_wise(gt_segments, gt_labels, None, length)
 
             segments = torch.tensor(results[video_id]['segments'])
@@ -503,10 +466,6 @@ class ActionSegmentationErrorDetectionEvaluator:
             scores = torch.tensor(results[video_id]['score'])
 
             pred = to_frame_wise(segments, labels, None, length)
-            # if len(scores) != len(segments):
-            #     pred = to_frame_wise(segments, labels, None, length)
-            # else:
-            #     pred = to_frame_wise(segments, labels, scores, length)
 
             input_video = Video(video_id, pred.tolist(), gt.tolist())
             input_video_list.append(input_video)
@@ -517,7 +476,7 @@ class ActionSegmentationErrorDetectionEvaluator:
         
         print("|Action segmentation|IoU:%.1f|edit:%.1f|F1@0.5:%.1f|Acc:%.1f|"%(out['IoU']*100, out['edit']*100, out['F1@0.50']*100, out['acc']*100))
 
-    # updated
+    # haven't updated
     def omission_detection(self):
         
         with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, 'eval_results.pkl'), "rb") as f:
@@ -547,14 +506,15 @@ class ActionSegmentationErrorDetectionEvaluator:
         gt_labels, gt_error_labels, video_lengths_id, \
             error_descriptions, id2num_dict, num2id_dict = get_gt(self.args.dataset, self.action2idx, self.args.split)
         # convert all the errors to the same class (-1)
-        gt_error_labels[gt_error_labels > 1] = -1
+        gt_error_labels[gt_error_labels > 0] = -1
+        gt_error_labels[gt_error_labels == 0] = 1
 
-        if combine_bg:
-            bg_to_normal = [0, 1]
-            set_labels = [1, -1]
-        else:
-            bg_to_normal = None
-            set_labels = [0, 1, -1]
+        # if combine_bg:
+        #     bg_to_normal = [0, 1]
+        #     set_labels = [1, -1]
+        # else:
+        #     bg_to_normal = None
+        #     set_labels = [0, 1, -1]
 
         
 
@@ -565,7 +525,7 @@ class ActionSegmentationErrorDetectionEvaluator:
             labels = np.array([-1, 0, 1])
             all_preds = np.random.choice(labels, size=len(gt_error_labels))
             cp_gt_error_labels = np.copy(gt_error_labels)
-            acc, p, r, f1 = acc_precision_recall_f1(all_preds, cp_gt_error_labels, set_labels, eval_each_class, bg_to_normal)
+            acc, p, r, f1 = acc_precision_recall_f1(all_preds, cp_gt_error_labels)#, set_labels, eval_each_class, bg_to_normal)
             if p_all is None:
                 p_all, r_all, f1_all, acc_all = p, r, f1, acc
             else:
@@ -626,9 +586,9 @@ if __name__ == '__main__':
 
     if args.error_detection:
         if args.threshold != -100.0:
-            evaluator.micro_framewise_error_detection(threshold=args.threshold, eval_each_class=False, combine_bg=True, is_visualize=args.visualize)
-            evaluator.macro_framewise_error_detection(threshold=args.threshold, eval_each_class=False, combine_bg=True, is_visualize=False)
-            evaluator.macro_segment_error_detection(threshold=args.threshold, combine_bg=True, is_visualize=False)
+            evaluator.micro_framewise_error_detection(threshold=args.threshold, is_visualize=args.visualize)
+            evaluator.macro_framewise_error_detection(threshold=args.threshold, is_visualize=False)
+            evaluator.macro_segment_error_detection(threshold=args.threshold, is_visualize=False)
         else:
             error_micro_list = {
                 'acc': [],
@@ -645,12 +605,11 @@ if __name__ == '__main__':
             fprs = []
             tprs = []
             for i in range(-20, 21):
-            # for i in range(-20, 31):
                 threshold = i / 10
                 thresholds.append(threshold)
-                error_micro_list = evaluator.micro_framewise_error_detection(output_list=error_micro_list, threshold=threshold, eval_each_class=False, combine_bg=True, is_visualize=args.visualize)
-                error_macro_list = evaluator.macro_framewise_error_detection(output_list=error_macro_list, threshold=threshold, eval_each_class=False, combine_bg=True)
-                eda_list = evaluator.macro_segment_error_detection(output_list=eda_list, threshold=threshold, combine_bg=True)
+                error_micro_list = evaluator.micro_framewise_error_detection(output_list=error_micro_list, threshold=threshold, is_visualize=args.visualize)
+                error_macro_list = evaluator.macro_framewise_error_detection(output_list=error_macro_list, threshold=threshold)
+                eda_list = evaluator.macro_segment_error_detection(output_list=eda_list, threshold=threshold)
 
             micro_fprs = np.array(error_micro_list['fpr'])
             micro_tprs = np.array(error_micro_list['tpr'])
@@ -667,12 +626,14 @@ if __name__ == '__main__':
             micro_tprs = np.sort(micro_tprs)
             macro_fprs = np.sort(macro_fprs)
             macro_tprs = np.sort(macro_tprs)
-            
+
             micro_fprs = np.concatenate((micro_fprs, np.array([1.0])), axis=0)
             micro_tprs = np.concatenate((micro_tprs, np.array([1.0])), axis=0)
             macro_fprs = np.concatenate((macro_fprs, np.array([1.0])), axis=0)
             macro_tprs = np.concatenate((macro_tprs, np.array([1.0])), axis=0)
-
+            # print(micro_fprs, micro_tprs)
+            # print(macro_fprs, macro_tprs)
+            # print(eda_list)
             micro_auc_value = auc(micro_fprs, micro_tprs)
             macro_auc_value = auc(macro_fprs, macro_tprs)
 
