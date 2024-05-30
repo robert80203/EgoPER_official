@@ -137,30 +137,23 @@ def main(args):
     print('Training set done!')
     # 1004, should not use gt to get threhold
     print('Size of validation set:', len(val_loader))
+
     for iter_idx, video_list in enumerate(val_loader, 0):
         with torch.no_grad():
             output = model(video_list)
             num_vids = len(output)
             for vid_idx in range(num_vids):
-                # generate frame-wise results and re-generate segments
                 preds = to_frame_wise(output[vid_idx]['segments'], output[vid_idx]['labels'],
                                     output[vid_idx]['scores'], video_list[vid_idx]['feats'].size(1), 
                                     fps=video_list[vid_idx]['fps'])
-                # action_labels, time_stamp_labels = generate_time_stamp_labels(preds, -2)
                 action_labels, time_stamp_labels = to_segments(preds)
                 video_list[vid_idx]['segments'] = torch.tensor(time_stamp_labels)
                 video_list[vid_idx]['labels'] = torch.tensor(action_labels).long()
-                # video_list[vid_idx]['scores_all'] = output[vid_idx]['scores_all']
-            # model(video_list, mode='get_thresholds', use_score=args.score)
             model(video_list, mode='get_thresholds')
 
-    
     print('Validation set done!')
 
     for ratio in range(-20, 21):
-    # for ratio in range(-20, 31):
-    # for ratio in range(20, 21):
-        # dict for results (for our evaluation code)
         results = {
             'video-id': [],
             't-start' : [],
@@ -169,7 +162,6 @@ def main(args):
             'score': []
         }
         threshold = ratio / 10
-        # output_file = os.path.join(f'{args.ckpt}{output_name}{threshold}.pkl')
         output_file = os.path.join(args.ckpt, output_name+'%.2f.pkl'%(threshold))
 
         # loop over test set
@@ -185,12 +177,8 @@ def main(args):
                     preds = to_frame_wise(output[vid_idx]['segments'], output[vid_idx]['labels'],
                                         output[vid_idx]['scores'], video_list[vid_idx]['feats'].size(1), 
                                         fps=video_list[vid_idx]['fps'])
-                    # action_labels, time_stamp_labels = generate_time_stamp_labels(preds, -2)
                     action_labels, time_stamp_labels = to_segments(preds)
                     video_id = output[vid_idx]['video_id']
-                    # if video_id == 'z184-sep-08-22-gopro':
-                    #     print(action_labels, time_stamp_labels)
-                    #     print(len(action_labels), len(time_stamp_labels))
                     video_list[vid_idx]['segments'] = torch.tensor(time_stamp_labels)
                     video_list[vid_idx]['labels'] = torch.tensor(action_labels).long()
 
@@ -204,11 +192,6 @@ def main(args):
                         if video_id not in results:
                             results[video_id] = {}
                         
-                        # if video_id == 'z184-sep-08-22-gopro':
-                        #     print(output[vid_idx]['segments'].numpy())
-                        #     print(output[vid_idx]['labels'].numpy())
-                        #     print(len(output[vid_idx]['segments'].numpy()), len(output[vid_idx]['labels'].numpy()))
-                        
                         results[video_id]['segments'] = output[vid_idx]['segments'].numpy()
                         results[video_id]['label'] = output[vid_idx]['labels'].numpy()
                         results[video_id]['score'] = output[vid_idx]['scores'].numpy()
@@ -217,12 +200,6 @@ def main(args):
             if (iter_idx != 0) and iter_idx % (print_freq) == 0:
                 torch.cuda.synchronize()
                 print('Threshold:%.3f, Test: [%05d/%05d]\t'%(threshold, iter_idx, len(test_loader)))
-        
-        # gather all stats and evaluate
-        # results['t-start'] = torch.cat(results['t-start']).numpy()
-        # results['t-end'] = torch.cat(results['t-end']).numpy()
-        # results['label'] = torch.cat(results['label']).numpy()
-        # results['score'] = torch.cat(results['score']).numpy()
 
         with open(output_file, "wb") as f:
             pickle.dump(results, f)

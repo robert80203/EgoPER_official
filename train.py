@@ -158,6 +158,8 @@ def main(args):
                     file_name='epoch_{:03d}.pth.tar'.format(epoch + 1)
                 )
             
+            
+            
     # wrap up
     tb_writer.close()
     print("All done!")

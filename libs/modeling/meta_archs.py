@@ -234,27 +234,13 @@ class PtTransformer_CSPL_GCN(nn.Module):
         self.cl_weight = train_cfg['cl_weight']
         self.num_negative_segments = train_cfg['num_negative_segments']
         self.use_contrastive = train_cfg['contrastive']
-        # self.cl_fpn_strides = [self.fpn_strides[i] for i in range(train_cfg['cl_level'])]
-        self.tao_bias = nn.Parameter(torch.tensor(0.0))
-        self.pre_cl_loss = None
-        ##################################################
-        # background setting
-        # self.num_bg_clusters = num_bg_clusters
-        # if num_bg_clusters > 1:
-        #     self.bg_cluster_model = KMeans(n_clusters=self.num_bg_clusters,verbose=False)
-        # # normal class setting
-        # self.num_normal_clusters = num_normal_clusters
-        # if num_normal_clusters > 1:
-        #     self.normal_cluster_models = {}
-        #     for i in range(1, num_classes):
-        #         self.normal_cluster_models[str(i)] = KMeans(n_clusters=num_normal_clusters, verbose=False)
-        
+        #self.tao_bias = nn.Parameter(torch.tensor(1.0))
+        self.tao_bias = 1.0
         self.num_normal_clusters = num_normal_clusters
-        if num_normal_clusters > 1:
+        if self.num_normal_clusters > 1:
             self.normal_cluster_models = {}
-            for i in range(num_classes):
-                self.normal_cluster_models[str(i)] = KMeans(n_clusters=num_normal_clusters, verbose=False)
-        ##################################################
+            for i in range(self.num_classes):
+                self.normal_cluster_models[str(i)] = KMeans(n_clusters=self.num_normal_clusters, verbose=False)
         # test time config
         self.test_pre_nms_thresh = test_cfg['pre_nms_thresh']
         self.test_pre_nms_topk = test_cfg['pre_nms_topk']
@@ -388,14 +374,19 @@ class PtTransformer_CSPL_GCN(nn.Module):
         self.prototypes = {}
         self.threshold_dict = {}
         for cls_idx in range(self.num_classes):
-            # self.prototypes[str(cls_idx)] = [None for i in range(len(self.cl_fpn_strides))]
             self.prototypes[str(cls_idx)] = None
             self.threshold_dict[str(cls_idx)] = None
 
+        if self.num_normal_clusters > 1:
+            self.normal_cluster_models = {}
+            for i in range(self.num_classes):
+                self.normal_cluster_models[str(i)] = KMeans(n_clusters=self.num_normal_clusters, verbose=False)
+    
     def flush_prototypes(self):
         for key, value in self.prototypes.items():
             if value is None:
                 continue
+
             if self.num_normal_clusters > 1:
                 frame_feat = value.permute(1, 0)
                 feat_list = frame_feat.unsqueeze(0)
@@ -409,23 +400,22 @@ class PtTransformer_CSPL_GCN(nn.Module):
             else:
                 self.prototypes[key] = value.mean(dim=1, keepdim=True)    
     
-
     def generate_prototypes(self, fpn_feats, segments, labels):
         for i in range(len(segments)):
             for j in range(len(segments[i])):
                 start = int(segments[i][j, 0])
                 end = int(segments[i][j, 1])
-                label = labels[i][j].item()
-                if str(label) in self.prototypes:
+                label = str(labels[i][j].item())
+                if label in self.prototypes:
                     if start >= end: # prevent nan problem (only happen when using predicted boundary)
                         continue
 
                     feats = fpn_feats[0][i, :, start:end]
                     
-                    if self.prototypes[str(label)] is None:
-                        self.prototypes[str(label)] = feats.detach()
+                    if self.prototypes[label] is None:
+                        self.prototypes[label] = feats.detach()
                     else:
-                        self.prototypes[str(label)] = torch.cat((self.prototypes[str(label)], feats.detach()), dim=1)
+                        self.prototypes[label] = torch.cat((self.prototypes[label], feats.detach()), dim=1)
 
     def get_thresholds(self, fpn_feats, segments, labels):
         for i in range(len(segments)):
@@ -434,36 +424,46 @@ class PtTransformer_CSPL_GCN(nn.Module):
             for j in range(len(segments[i])):
                 start = int(segments[i][j, 0])
                 end = int(segments[i][j, 1])
-                label = labels[i][j].item()
+                label = str(labels[i][j].item())
 
-                if start == end: # prevent nan problem (only happen when using predicted boundary)
+                if start >= end: # prevent nan problem (only happen when using predicted boundary)
                     continue
-                
+
+                if self.prototypes[label] is None:
+                    continue
+
                 feats = fpn_feats[0][i, :, start:end]
-
-
-                if self.prototypes[str(label)] is None:
-                    continue
                 
                 if self.num_normal_clusters > 1:
-                    best_sims_mean = -1 #0
-                    best_sims = None
-                    best_std = None
+                    # best_sims_mean = -1000
+                    # best_sims = None
+                    # best_std = None
+                    # for normal_cluster_idx in range(self.num_normal_clusters):
+                    #     sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
+                    #     if sims.mean() > best_sims_mean:
+                    #         best_sims_mean = sims.mean()
+                    #         best_sims = sims
+                    #         best_std = sims.std()
+                    # sims = best_sims
+                    # std = best_std
+
+                    total_sims = None
                     for normal_cluster_idx in range(self.num_normal_clusters):
-                        sims = self.cosine_sim(self.prototypes[str(label)][normal_cluster_idx], feats)
-                        if sims.mean() > best_sims_mean:
-                            best_sims_mean = sims.mean()
-                            best_sims = sims
-                            best_std = sims.std()
-                    sims = best_sims
-                    std = best_std
+                        sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
+                        if total_sims is None:
+                            total_sims = sims.unsqueeze(1)
+                        else:
+                            total_sims = torch.cat((total_sims, sims.unsqueeze(1)), 1)
+                    sims, _ = torch.max(total_sims, 1)
                 else:
-                    sims = self.cosine_sim(self.prototypes[str(label)], feats)
+                    sims = self.cosine_sim(self.prototypes[label], feats)
                 
-                if self.threshold_dict[str(label)] is None:
-                    self.threshold_dict[str(label)] = sims
+                sims = (sims + 1) / 2
+
+                if self.threshold_dict[label] is None:
+                    self.threshold_dict[label] = sims
                 else:
-                    self.threshold_dict[str(label)] = torch.cat((self.threshold_dict[str(label)], sims), dim=0)
+                    self.threshold_dict[label] = torch.cat((self.threshold_dict[label], sims), dim=0)
 
     # compute the similarity only with the prototype of predictied class
     def compute_similarity(self, fpn_feats, segments, labels, video_id, threshold=0.5):
@@ -474,33 +474,54 @@ class PtTransformer_CSPL_GCN(nn.Module):
             for j in range(len(segments[i])):
                 start = int(segments[i][j, 0])
                 end = int(segments[i][j, 1])
-                sim_list_pyramid = [] # shape: (pyramid level, keys of the classes, frame similarities)
-                label = labels[i][j].item()
+                label = str(labels[i][j].item())
                 if start >= end: # prevent nan problem (only happen when using predicted boundary)
                     continue
+                # assert start < end
                 
                 feats = fpn_feats[0][i, :, start:end]
 
                 # if prototype does not exist, then assign the segment to BG
-                if self.prototypes[str(label)] is None:
+                if self.prototypes[label] is None:
                     output_labels.append(-1)
                     output_sim.append(0)
                     continue
                 
-                if self.num_normal_clusters > 1:
-                    best_sims_mean = -1 #0
-                    best_sims = None
-                    for normal_cluster_idx in range(self.num_normal_clusters):
-                        sims = self.cosine_sim(self.prototypes[str(label)][normal_cluster_idx], feats)
-                        if sims.mean() > best_sims_mean:
-                            best_sims_mean = sims.mean()
-                            best_sims = sims
-                    sims = best_sims
-                else:
-                    sims = self.cosine_sim(self.prototypes[str(label)], feats)
+                # no error in background
+                if label == '0':
+                    if threshold == 2.0:
+                        output_labels.append(-1)
+                    else:
+                        output_labels.append(0)
+                    output_sim.append(1)
+                    continue
                 
+                # assert self.prototypes[label] is not None
+                
+                if self.num_normal_clusters > 1:
+                    # best_sims_mean = -1000 #0
+                    # best_sims = None
+                    # for normal_cluster_idx in range(self.num_normal_clusters):
+                    #     sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
+                    #     if sims.mean() > best_sims_mean:
+                    #         best_sims_mean = sims.mean()
+                    #         best_sims = sims
+                    # sims = best_sims
+                    total_sims = None
+                    for normal_cluster_idx in range(self.num_normal_clusters):
+                        sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
+                        if total_sims is None:
+                            total_sims = sims.unsqueeze(1)
+                        else:
+                            total_sims = torch.cat((total_sims, sims.unsqueeze(1)), 1)
+                    sims, _ = torch.max(total_sims, 1)
+                else:
+                    sims = self.cosine_sim(self.prototypes[label], feats)
+                
+                sims = (sims + 1) / 2
+
                 # pre-computed threshold with mean and std
-                value = self.threshold_dict[str(label)]
+                value = self.threshold_dict[label]
                 if value is None:
                     thres = (threshold + 2.0) / 4.0
                 else:
@@ -515,7 +536,7 @@ class PtTransformer_CSPL_GCN(nn.Module):
                 num_sample = torch.sum(action_list == 1)
                 sim_mean = torch.mean(sims[action_list == 1])
                 best_num_sample = num_sample
-                best_action = str(label)
+                best_action = label
                 best_similarity = sim_mean
                 
                 # majority voting for unseen class
@@ -967,20 +988,21 @@ class PtTransformer_CSPL_GCN(nn.Module):
 
     def contrastive_loss(self, fpn_feats, video_list):
         cl_loss = 0
+        factor = 0
         num_negative_samples = self.num_negative_segments
 
         for i in range(len(video_list)):
             num_segments = len(video_list[i]['segments'])
-            num_sample = num_segments
+            # num_sample = num_segments
             # non-repeative sampling
-            sample_segments = random.sample(range(num_segments), num_sample)
-            
+            # sample_segments = random.sample(range(num_segments), num_sample)
+
             # traverse segments
-            for j in sample_segments:
+            for j in range(num_segments):#sample_segments:
                 p_start = int(video_list[i]['segments'][j][0])
                 p_end = int(video_list[i]['segments'][j][1])
+                p_label = str(video_list[i]['labels'][j].item())
 
-                p_label = video_list[i]['labels'][j].item()
                 n_start_list = []
                 n_end_list = []
                 n_label_list = []
@@ -990,49 +1012,49 @@ class PtTransformer_CSPL_GCN(nn.Module):
                 while len(n_start_list) < num_negative_samples:
                     n_v_idx = random.randint(0, len(video_list)-1)
                     n_idx = random.randint(0, len(video_list[n_v_idx]['labels'])-1)
-                    n_label = video_list[n_v_idx]['labels'][n_idx].item()
+                    n_label = str(video_list[n_v_idx]['labels'][n_idx].item())
                     n_start = int(video_list[n_v_idx]['segments'][n_idx][0])
                     n_end = int(video_list[n_v_idx]['segments'][n_idx][1])
                     
                     # the selected segment cannot be the same label as positive one and start time != end time
-                    if n_label != p_label and n_start != n_end:
+                    if n_label != p_label and n_start != n_end and (n_end - n_start) > 5:
                         n_start_list.append(n_start)
                         n_end_list.append(n_end)
                         n_label_list.append(n_label)
                         n_v_idx_list.append(n_v_idx)
+                # avoid nan problem
+                if p_start >= p_end:
+                    continue
+                if self.prototypes[p_label] is None:
+                    continue
                 
                 # traverse every level of fpn
                 numerator = None
                 denominator = None
-                
-                # avoid nan problem
-                if p_start >= p_end:
-                    continue
-                
+
                 pos_feats = fpn_feats[0][i, :, p_start:p_end]
-                
-                # compute positive scores
-                if self.prototypes[str(p_label)] is None:
-                    continue
 
                 if self.num_normal_clusters > 1:
-                    best_sims_mean = -1
+                    best_sims_mean = -10000
                     best_sims = None
                     best_normal_cluster_idx = -1
                     for normal_cluster_idx in range(self.num_normal_clusters):
-                        sims = self.cosine_sim(self.prototypes[str(p_label)][normal_cluster_idx], pos_feats)
-                        if sims.mean() > best_sims_mean:
+                        sims = self.cosine_sim(self.prototypes[p_label][normal_cluster_idx], pos_feats)
+                        if best_sims is None or sims.mean() > best_sims_mean:
                             best_sims_mean = sims.mean()
                             best_sims = sims
                             best_normal_cluster_idx = normal_cluster_idx
-                    pos_scores = best_sims
+                    # pos_scores = best_sims
+                    pos_scores = (best_sims + 1) / 2
                 else:
-                    pos_scores = self.cosine_sim(self.prototypes[str(p_label)], pos_feats)
-
-                if numerator is None:
-                    numerator = torch.exp(pos_scores / F.relu(self.tao_bias + 1.0))
-                else:
-                    numerator = torch.cat((numerator, torch.exp(pos_scores / F.relu(self.tao_bias + 1.0))), dim=0)
+                    # pos_scores = self.cosine_sim(self.prototypes[p_label], pos_feats)
+                    pos_scores = (self.cosine_sim(self.prototypes[p_label], pos_feats) + 1) / 2
+                
+                # if numerator is None:
+                #     numerator = torch.exp(pos_scores / self.tao_bias)
+                # else:
+                #     numerator = torch.cat((numerator, torch.exp(pos_scores / self.tao_bias)), dim=0)
+                numerator = torch.exp(pos_scores / self.tao_bias)
                 
                 # compute negative scores
                 for l in range(len(n_start_list)):
@@ -1043,33 +1065,147 @@ class PtTransformer_CSPL_GCN(nn.Module):
                     n_v_idx = n_v_idx_list[l]
 
                     # avoid nan problem
-                    if n_start == n_end:
+                    if n_start >= n_end:
                         continue
+                    # assert n_start < n_end
 
                     neg_feats = fpn_feats[0][n_v_idx, :, n_start:n_end]
                     
-
                     if self.num_normal_clusters > 1:
-                        neg_scores = self.cosine_sim(self.prototypes[str(p_label)][best_normal_cluster_idx], neg_feats)
+                        # neg_scores = self.cosine_sim(self.prototypes[p_label][best_normal_cluster_idx], neg_feats)
+                        neg_scores = (self.cosine_sim(self.prototypes[p_label][best_normal_cluster_idx], neg_feats) + 1) / 2
                     else:
-                        neg_scores = self.cosine_sim(self.prototypes[str(p_label)], neg_feats)
+                        # neg_scores = self.cosine_sim(self.prototypes[p_label], neg_feats)
+                        neg_scores = (self.cosine_sim(self.prototypes[p_label], neg_feats) + 1) / 2
                     
                     if denominator is None:
-                        denominator = torch.exp(neg_scores / (F.relu(self.tao_bias) + 1.0))
+                        denominator = torch.exp(neg_scores / self.tao_bias)
                     else:
-                        denominator = torch.cat((denominator, torch.exp(neg_scores / (F.relu(self.tao_bias) + 1.0))), dim=0)
+                        denominator = torch.cat((denominator, torch.exp(neg_scores / self.tao_bias)), dim=0)
+                    
                 # infoNCE loss
                 cl_loss += torch.log(numerator.sum(dim=0) / (numerator.sum(dim=0) + denominator.sum(dim=0)))
-        
-        if self.pre_cl_loss == None:
-            self.pre_cl_loss = torch.abs(cl_loss)
-            factor = 1.0
-        else:
-            factor = torch.abs(self.pre_cl_loss - torch.abs(cl_loss)) / self.pre_cl_loss
-            factor = torch.clamp(factor, min=1.0).detach()
-            self.pre_cl_loss = torch.abs(cl_loss)
+                factor += 1
 
         return - cl_loss / factor
+
+    # def contrastive_loss(self, fpn_feats, video_list):
+    #     cl_loss = 0
+    #     factor = 0
+    #     num_negative_samples = self.num_negative_segments
+
+    #     for i in range(len(video_list)):
+    #         num_segments = len(video_list[i]['segments'])
+    #         num_sample = num_segments
+    #         # non-repeative sampling
+    #         sample_segments = random.sample(range(num_segments), num_sample)
+    #         factor += len(sample_segments)
+
+    #         # traverse segments
+    #         for j in sample_segments:
+    #             p_start = int(video_list[i]['segments'][j][0])
+    #             p_end = int(video_list[i]['segments'][j][1])
+
+    #             p_label = str(video_list[i]['labels'][j].item())
+    #             n_start_list = []
+    #             n_end_list = []
+    #             n_label_list = []
+    #             n_v_idx_list = []
+                
+    #             # select negative segments across batch
+    #             while len(n_start_list) < num_negative_samples:
+    #                 n_v_idx = random.randint(0, len(video_list)-1)
+    #                 n_idx = random.randint(0, len(video_list[n_v_idx]['labels'])-1)
+    #                 n_label = str(video_list[n_v_idx]['labels'][n_idx].item())
+    #                 n_start = int(video_list[n_v_idx]['segments'][n_idx][0])
+    #                 n_end = int(video_list[n_v_idx]['segments'][n_idx][1])
+                    
+    #                 # the selected segment cannot be the same label as positive one and start time != end time
+    #                 if n_label != p_label and n_start != n_end:
+    #                     n_start_list.append(n_start)
+    #                     n_end_list.append(n_end)
+    #                     n_label_list.append(n_label)
+    #                     n_v_idx_list.append(n_v_idx)
+                
+    #             # traverse every level of fpn
+    #             numerator = None
+    #             denominator = None
+                
+    #             # avoid nan problem
+    #             if p_start >= p_end:
+    #                 continue
+    #             if self.prototypes[p_label] is None:
+    #                 continue
+
+    #             # assert p_start < p_end
+                
+    #             pos_feats = fpn_feats[0][i, :, p_start:p_end]
+                
+    #             # compute positive scores
+                
+    #             # assert self.prototypes[p_label] is not None
+
+    #             if self.num_normal_clusters > 1:
+    #                 best_sims_mean = -10000
+    #                 best_sims = None
+    #                 best_normal_cluster_idx = -1
+    #                 for normal_cluster_idx in range(self.num_normal_clusters):
+    #                     sims = self.cosine_sim(self.prototypes[p_label][normal_cluster_idx], pos_feats)
+    #                     if best_sims is None or sims.mean() > best_sims_mean:
+    #                         best_sims_mean = sims.mean()
+    #                         best_sims = sims
+    #                         best_normal_cluster_idx = normal_cluster_idx
+    #                 # pos_scores = best_sims
+    #                 pos_scores = (best_sims + 1) / 2
+    #             else:
+    #                 # pos_scores = self.cosine_sim(self.prototypes[p_label], pos_feats)
+    #                 pos_scores = (self.cosine_sim(self.prototypes[p_label], pos_feats) + 1) / 2
+                
+    #             if numerator is None:
+    #                 numerator = torch.exp(pos_scores / self.tao_bias)
+    #             else:
+    #                 numerator = torch.cat((numerator, torch.exp(pos_scores / self.tao_bias)), dim=0)
+                
+    #             # compute negative scores
+    #             for l in range(len(n_start_list)):
+    #                 n_start = n_start_list[l]
+    #                 n_end = n_end_list[l]
+                    
+    #                 n_label = n_label_list[l]
+    #                 n_v_idx = n_v_idx_list[l]
+
+    #                 # avoid nan problem
+    #                 if n_start >= n_end:
+    #                     continue
+    #                 # assert n_start < n_end
+
+    #                 neg_feats = fpn_feats[0][n_v_idx, :, n_start:n_end]
+                    
+
+    #                 if self.num_normal_clusters > 1:
+    #                     # neg_scores = self.cosine_sim(self.prototypes[p_label][best_normal_cluster_idx], neg_feats)
+    #                     neg_scores = (self.cosine_sim(self.prototypes[p_label][best_normal_cluster_idx], neg_feats) + 1) / 2
+    #                 else:
+    #                     # neg_scores = self.cosine_sim(self.prototypes[p_label], neg_feats)
+    #                     neg_scores = (self.cosine_sim(self.prototypes[p_label], neg_feats) + 1) / 2
+                    
+    #                 if denominator is None:
+    #                     denominator = torch.exp(neg_scores / self.tao_bias)
+    #                 else:
+    #                     denominator = torch.cat((denominator, torch.exp(neg_scores / self.tao_bias)), dim=0)
+    #             # infoNCE loss
+    #             cl_loss += torch.log(numerator.sum(dim=0) / (numerator.sum(dim=0) + denominator.sum(dim=0)))
+    #             # cl_loss += torch.log(numerator.mean(dim=0) / (numerator.mean(dim=0) + denominator.mean(dim=0)))
+        
+    #     # if self.pre_cl_loss == None:
+    #     #     self.pre_cl_loss = torch.abs(cl_loss)
+    #     #     factor = 1.0
+    #     # else:
+    #     #     factor = torch.abs(self.pre_cl_loss - torch.abs(cl_loss)) / self.pre_cl_loss
+    #     #     factor = torch.clamp(factor, min=1.0).detach()
+    #     #     self.pre_cl_loss = torch.abs(cl_loss)
+
+    #     return - cl_loss / factor
 
     @torch.no_grad()
     def inference(

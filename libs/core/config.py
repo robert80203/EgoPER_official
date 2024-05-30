@@ -3,10 +3,10 @@ import yaml
 
 DEFAULTS = {
     # random seed for reproducibility, a large number is preferred
-    "init_rand_seed": 1234567891,
+    "init_rand_seed": 0,
     # dataset loader, specify the dataset here
     "dataset_name": "EgoPER",
-    "devices": ['cuda:0'], # default: single gpu
+    "devices": ['cuda:3'], # default: single gpu
     "train_split": 'training',
     "val_split": 'validation',
     "model_name": "LocPointTransformer",
