@@ -29,14 +29,13 @@ def to_frame_wise(segments, labels, scores, length, default_cls=0, fps=1):
     if scores is None:
         for j in range(len(segments)):
             if segments[j, 1] != segments[j, 0]:
-                preds[int(segments[j, 0])*fps:int(segments[j, 1])*fps] = labels[j]
-                # preds[int(segments[j, 0])*fps:int(segments[j, 1])*fps+1] = labels[j] # don't know why still have to add +1
+                preds[int(segments[j, 0]*fps):int(segments[j, 1]*fps)] = labels[j]
     else:
         asce_scores, indices = torch.sort(scores, 0)
         error_indices = []
         for j in indices:
             if segments[j, 1] != segments[j, 0]: #and scores[j] > 0.3:
-                preds[int(segments[j, 0])*fps:int(segments[j, 1])*fps] = labels[j]
+                preds[int(segments[j, 0]*fps):int(segments[j, 1]*fps)] = labels[j]
 
     return preds.long()
 

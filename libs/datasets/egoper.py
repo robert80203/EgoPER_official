@@ -27,7 +27,7 @@ class EgoPERdataset(Dataset):
         task,
     ):
 
-        root_dir = '/mnt/raptor/shihpo'
+        root_dir = '/mnt/raptor/datasets/EgoPER'
         self.split = split
         self.is_training = is_training
         self.default_fps = default_fps
@@ -40,13 +40,13 @@ class EgoPERdataset(Dataset):
         self.bg_idx = 0
         self.annotations = {}
 
-        self.feat_path = os.path.join(root_dir, task, 'data/feature_fps10_mp')
+        self.feat_path = os.path.join(root_dir, task, 'features_10fps')
 
         
         with open(os.path.join(root_dir, task, self.split+'.txt'), 'r') as fp:
             lines = fp.readlines()
             self.data_list = [line.strip('\n') for line in lines]
-        with open(os.path.join(root_dir, 'EgoPER/preprocess/annotation.json'), 'r') as fp:
+        with open(os.path.join(root_dir, 'annotation.json'), 'r') as fp:
             all_annot = json.load(fp)
         
         annot = all_annot[task]
@@ -63,7 +63,7 @@ class EgoPERdataset(Dataset):
 
         # graph input
         if self.use_gcn:
-            with open(os.path.join(root_dir, 'EgoPER/preprocess/active_object.json'), 'r') as fp:
+            with open(os.path.join(root_dir, 'active_object.json'), 'r') as fp:
                 all_active_obj = json.load(fp)
             
             active_obj = all_active_obj[task]
@@ -78,7 +78,6 @@ class EgoPERdataset(Dataset):
                     self.bboxes[video_id] = bbox
                     self.bbox_classes[video_id] = bbox_class
                     self.edge_maps[video_id] = edge_map
-
 
         # self.db_attributes = {
         #     'dataset_name': 'oatmeal',
@@ -123,6 +122,7 @@ class EgoPERdataset(Dataset):
             'duration': len(feats) / self.default_fps,
         }
 
+        
         if self.use_gcn:
             bbox_class = self.bbox_classes[video_id]
             bbox = self.bboxes[video_id]
@@ -130,6 +130,9 @@ class EgoPERdataset(Dataset):
             data_dict['bbox_class'] = torch.tensor(bbox_class).long()
             data_dict['bbox'] = torch.tensor(bbox).float()
             data_dict['edge_map'] = torch.tensor(edge_map).float()
+
+        # if feats.shape[0] != bbox.shape[0]:
+        #     print(feats.shape, bbox.shape, video_id)
 
         # truncate the features during training
         if self.is_training:
