@@ -475,80 +475,76 @@ class PtTransformer_CSPL_GCN(nn.Module):
                 start = int(segments[i][j, 0])
                 end = int(segments[i][j, 1])
                 label = str(labels[i][j].item())
-                if start >= end: # prevent nan problem (only happen when using predicted boundary)
-                    continue
-                # assert start < end
                 
+                if start > end:
+                    continue
+                elif start == end:
+                    end = start + 1
+
                 feats = fpn_feats[0][i, :, start:end]
 
                 # if prototype does not exist, then assign the segment to BG
                 if self.prototypes[label] is None:
                     output_labels.append(-1)
                     output_sim.append(0)
-                    continue
-                
                 # no error in background
-                if label == '0':
-                    if threshold == 2.0:
+                elif label == '0':
+                    if threshold >= 2.0:
                         output_labels.append(-1)
                     else:
                         output_labels.append(0)
                     output_sim.append(1)
-                    continue
-                
-                # assert self.prototypes[label] is not None
-                
-                if self.num_normal_clusters > 1:
-                    # best_sims_mean = -1000 #0
-                    # best_sims = None
-                    # for normal_cluster_idx in range(self.num_normal_clusters):
-                    #     sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
-                    #     if sims.mean() > best_sims_mean:
-                    #         best_sims_mean = sims.mean()
-                    #         best_sims = sims
-                    # sims = best_sims
-                    total_sims = None
-                    for normal_cluster_idx in range(self.num_normal_clusters):
-                        sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
-                        if total_sims is None:
-                            total_sims = sims.unsqueeze(1)
-                        else:
-                            total_sims = torch.cat((total_sims, sims.unsqueeze(1)), 1)
-                    sims, _ = torch.max(total_sims, 1)
                 else:
-                    sims = self.cosine_sim(self.prototypes[label], feats)
-                
-                sims = (sims + 1) / 2
+                    if self.num_normal_clusters > 1:
+                        # best_sims_mean = -1000 #0
+                        # best_sims = None
+                        # for normal_cluster_idx in range(self.num_normal_clusters):
+                        #     sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
+                        #     if sims.mean() > best_sims_mean:
+                        #         best_sims_mean = sims.mean()
+                        #         best_sims = sims
+                        # sims = best_sims
+                        total_sims = None
+                        for normal_cluster_idx in range(self.num_normal_clusters):
+                            sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
+                            if total_sims is None:
+                                total_sims = sims.unsqueeze(1)
+                            else:
+                                total_sims = torch.cat((total_sims, sims.unsqueeze(1)), 1)
+                        sims, _ = torch.max(total_sims, 1)
+                    else:
+                        sims = self.cosine_sim(self.prototypes[label], feats)
+                    
+                    sims = (sims + 1) / 2
 
-                # pre-computed threshold with mean and std
-                value = self.threshold_dict[label]
-                if value is None:
-                    thres = (threshold + 2.0) / 4.0
-                else:
-                    std = value.std(0)
-                    thres = value.mean(0) + threshold * std
-                
-                thres_cond = sims < thres
-                action_list = torch.ones(sims.size()).long()
-                action_list[thres_cond] = -1
-                
-                # majority voting for seen classes
-                num_sample = torch.sum(action_list == 1)
-                sim_mean = torch.mean(sims[action_list == 1])
-                best_num_sample = num_sample
-                best_action = label
-                best_similarity = sim_mean
-                
-                # majority voting for unseen class
-                num_sample = torch.sum(action_list == -1)
-                if num_sample > best_num_sample:
-                    best_action = '-1'
-                    best_similarity = 0 
+                    # pre-computed threshold with mean and std
+                    value = self.threshold_dict[label]
+                    if value is None:
+                        thres = (threshold + 2.0) / 4.0
+                    else:
+                        std = value.std(0)
+                        thres = value.mean(0) + threshold * std
+                    
+                    thres_cond = sims < thres
+                    action_list = torch.ones(sims.size()).long()
+                    action_list[thres_cond] = -1
+                    
+                    # majority voting for seen classes
+                    num_sample = torch.sum(action_list == 1)
+                    sim_mean = torch.mean(sims[action_list == 1])
+                    best_num_sample = num_sample
+                    best_action = label
+                    best_similarity = sim_mean
+                    
+                    # majority voting for unseen class
+                    num_sample = torch.sum(action_list == -1)
+                    if num_sample > best_num_sample:
+                        best_action = '-1'
+                        best_similarity = 0 
 
-                output_labels.append(int(best_action))
-                output_sim.append(best_similarity)
+                    output_labels.append(int(best_action))
+                    output_sim.append(best_similarity)
                 
-
             b_output.append(
                 {
                     'video_id': video_id[i],

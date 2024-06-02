@@ -1,19 +1,44 @@
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/pinwheels_aod_bgr1.0.yaml --output final
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/pinwheels_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/pinwheels_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
-# CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/pinwheels_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/pinwheels_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/pinwheels_aod_bgr1.0.yaml --output final
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/pinwheels_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/pinwheels_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/pinwheels_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/pinwheels_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
 
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/quesadilla_aod_bgr1.0.yaml --output final
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/quesadilla_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/quesadilla_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
-# CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/quesadilla_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/quesadilla_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/quesadilla_aod_bgr1.0.yaml --output final
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/quesadilla_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/quesadilla_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/quesadilla_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/quesadilla_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
 
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/tea_aod_bgr1.0.yaml --output final
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/tea_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/tea_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
-# CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/tea_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/tea_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/tea_aod_bgr1.0.yaml --output final
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/tea_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/tea_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/tea_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/tea_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
 
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/oatmeal_aod_bgr1.0.yaml --output final
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/oatmeal_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/oatmeal_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
-# CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/oatmeal_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/oatmeal_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/oatmeal_aod_bgr1.0.yaml --output final
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/oatmeal_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/oatmeal_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/oatmeal_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/oatmeal_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
 
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/coffee_aod_bgr1.0.yaml --output final
-CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/coffee_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/coffee_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
-# CUDA_VISIBLE_DECVICES=3 python train.py ./configs/EgoPER/coffee_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/coffee_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/coffee_aod_bgr1.0.yaml --output final
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/coffee_aod_cspl_p4_neg4_bgr1.0.yaml --resume ./ckpt/EgoPER/coffee_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+CUDA_VISIBLE_DECVICES=6 python train.py ./configs/EgoPER/coffee_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/EgoPER/coffee_aod_bgr1.0_final/epoch_105.pth.tar --output final --maxvideos 10
+
+# python test_ed.py ./configs/EgoPER/pinwheels_aod_cspl_p4_neg4_bgr1.0.yaml ./ckpt/EgoPER/pinwheels_aod_cspl_p4_neg4_bgr1.0_final
+# python metric_vis.py --task pinwheels --dirname pinwheels_aod_cspl_p4_neg4_bgr1.0_final/ -ed
+# python test_ed.py ./configs/EgoPER/pinwheels_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/EgoPER/pinwheels_aod_cspl_p2_neg2_bgr1.0_final
+# python metric_vis.py --task pinwheels --dirname pinwheels_aod_cspl_p2_neg2_bgr1.0_final/ -ed
+
+# python test_ed.py ./configs/EgoPER/quesadilla_aod_cspl_p4_neg4_bgr1.0.yaml ./ckpt/EgoPER/quesadilla_aod_cspl_p4_neg4_bgr1.0_final
+# python metric_vis.py --task quesadilla --dirname quesadilla_aod_cspl_p4_neg4_bgr1.0_final/ -ed
+# python test_ed.py ./configs/EgoPER/quesadilla_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/EgoPER/quesadilla_aod_cspl_p2_neg2_bgr1.0_final
+# python metric_vis.py --task quesadilla --dirname quesadilla_aod_cspl_p2_neg2_bgr1.0_final/ -ed
+
+# python test_ed.py ./configs/EgoPER/tea_aod_cspl_p4_neg4_bgr1.0.yaml ./ckpt/EgoPER/tea_aod_cspl_p4_neg4_bgr1.0_final
+# python metric_vis.py --task tea --dirname tea_aod_cspl_p4_neg4_bgr1.0_final/ -ed
+# python test_ed.py ./configs/EgoPER/tea_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/EgoPER/tea_aod_cspl_p2_neg2_bgr1.0_final
+# python metric_vis.py --task tea --dirname tea_aod_cspl_p2_neg2_bgr1.0_final/ -ed
+
+# python test_ed.py ./configs/EgoPER/oatmeal_aod_cspl_p4_neg4_bgr1.0.yaml ./ckpt/EgoPER/oatmeal_aod_cspl_p4_neg4_bgr1.0_final
+# python metric_vis.py --task oatmeal --dirname oatmeal_aod_cspl_p4_neg4_bgr1.0_final/ -ed
+# python test_ed.py ./configs/EgoPER/oatmeal_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/EgoPER/oatmeal_aod_cspl_p2_neg2_bgr1.0_final
+# python metric_vis.py --task oatmeal --dirname oatmeal_aod_cspl_p2_neg2_bgr1.0_final/ -ed
+
+# python test_ed.py ./configs/EgoPER/coffee_aod_cspl_p4_neg4_bgr1.0.yaml ./ckpt/EgoPER/coffee_aod_cspl_p4_neg4_bgr1.0_final
+# python metric_vis.py --task coffee --dirname coffee_aod_cspl_p4_neg4_bgr1.0_final/ -ed
+# python test_ed.py ./configs/EgoPER/coffee_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/EgoPER/coffee_aod_cspl_p2_neg2_bgr1.0_final
+# python metric_vis.py --task coffee --dirname coffee_aod_cspl_p2_neg2_bgr1.0_final/ -ed

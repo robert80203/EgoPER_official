@@ -6,7 +6,7 @@ DEFAULTS = {
     "init_rand_seed": 0,
     # dataset loader, specify the dataset here
     "dataset_name": "EgoPER",
-    "devices": ['cuda:3'], # default: single gpu
+    "devices": ['cuda:7'], # default: single gpu
     "train_split": 'training',
     "val_split": 'validation',
     "model_name": "LocPointTransformer",
