@@ -54,29 +54,9 @@ def main(args):
     _ = fix_random_seed(0, include_cuda=True)
 
     """2. create dataset / dataloader"""
-    # val_dataset = make_dataset(
-    #     cfg['dataset_name'], False, cfg['val_split'], **cfg['dataset']
-    # )
-    # # set bs = 1, and disable shuffle
-    # val_loader = make_data_loader(
-    #     val_dataset, False, None, 1, cfg['loader']['num_workers']
-    # )
-
-    # val_dataset = make_dataset(
-    #     cfg['dataset_name'], False, cfg['test_split'], **cfg['dataset']
-    # )
-    # if args.error:
-    #     val_dataset = make_dataset(
-    #         cfg['dataset_name'], False, cfg['test_split'], **cfg['dataset']
-    #     )
-    # else:
-    #     val_dataset = make_dataset(
-    #             cfg['dataset_name'], False, cfg['val_split'], **cfg['dataset']
-    #     )
     val_dataset = make_dataset(
             cfg['dataset_name'], False, cfg['test_split'], **cfg['dataset']
         )
-    # val_dataset.no_feat_stride = True
     # set bs = 1, and disable shuffle
     val_loader = make_data_loader(
         val_dataset, False, None, 1, cfg['loader']['num_workers']
@@ -102,15 +82,6 @@ def main(args):
 
     # set up evaluator
     det_eval, output_file = None, None
-    # if not args.saveonly:
-    #     val_db_vars = val_dataset.get_attributes()
-    #     det_eval = ANETdetection(
-    #         val_dataset.json_file,
-    #         val_dataset.split[0],
-    #         tiou_thresholds = val_db_vars['tiou_thresholds']
-    #     )
-    # else:
-    #     output_file = os.path.join(os.path.split(ckpt_file)[0], 'eval_results.pkl')
     
     output_file = os.path.join(os.path.split(ckpt_file)[0], 'eval_results.pkl')
 
@@ -148,11 +119,7 @@ if __name__ == '__main__':
                         help='checkpoint epoch')
     parser.add_argument('-t', '--topk', default=-1, type=int,
                         help='max number of output actions (default: -1)')
-    # parser.add_argument('--saveonly', action='store_true',
-    #                     help='Only save the ouputs without evaluation (e.g., for test set)')
     parser.add_argument('-p', '--print-freq', default=10, type=int,
                         help='print frequency (default: 10 iterations)')
-    parser.add_argument('--proto', action='store_true', help='use prototype head instead for AS')
-    # parser.add_argument('--error', action='store_true')
     args = parser.parse_args()
     main(args)

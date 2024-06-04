@@ -1,3 +1,7 @@
+##############################################################################################
+# The code is modified from ActionFormer: https://github.com/happyharrycn/actionformer_release
+##############################################################################################
+
 import math
 import numpy as np
 
@@ -870,69 +874,6 @@ class TemporalGCNConv1d(nn.Module):
         )
     def forward(self, x):
         return self.main(x)
-
-# class GCNBlock(nn.Module):
-#     """
-#     A simple Graph Convolutional Block
-#     """
-#     def __init__(
-#         self,
-#         n_embd,                # dimension of the input features
-#         num_node,              # num of node
-#         num_classes = 43,      # number of object types
-#         downsample = False,
-#         scale_factor = 1.0
-#     ):
-#         super().__init__()
-#         feat_dim = n_embd
-#         self.feat_dim = feat_dim
-#         self.num_node = num_node
-#         # self.linear = nn.Linear(4, feat_dim)
-#         # self.linear = nn.Linear(4, feat_dim, bias=False)
-#         self.bbox_embedding = nn.Embedding(1280, feat_dim, padding_idx=0)
-#         self.embedding = nn.Embedding(num_classes, feat_dim, padding_idx=0)
-#         self.relu = nn.ReLU()
-#         self.conv2d_1_weight = nn.Conv2d(feat_dim * 2, feat_dim, 1, 1, 0, bias=False)
-#         #self.conv2d_2_weight = nn.Conv2d(feat_dim, feat_dim // 2, 1, 1, 0, bias=False)
-#         #######################
-#         # new
-#         self.conv2d_2_weight = nn.Conv2d(feat_dim, feat_dim, 1, 1, 0, bias=False)
-#         self.conv1d_merge_node_weight = nn.Conv1d(feat_dim, feat_dim, num_node, 1, 0, bias=False)
-#         #######################
-#         self.layernorm = LayerNorm(self.feat_dim)
-#         self.downsample = downsample
-#         self.scale_factor = scale_factor
-
-#     def generate_graph_feature(self, bbox, bbox_class, edge_map):
-#         B, T, N, C = bbox_class.size()
-#         node = torch.cat((bbox, bbox_class), dim=3).permute(0, 3, 1, 2) # becomes (B, C, T, N)
-#         node = self.conv2d_1_weight(node).permute(0, 2, 3, 1) # becomes (B, T, N, C)
-#         node = torch.einsum('btij,btjk->btik', edge_map, node)
-#         node = self.relu(node).permute(0, 3, 1, 2) # becomes (B, C, T, N)
-#         node = self.conv2d_2_weight(node).permute(0, 2, 3, 1) # becomes (B, T, N, C)
-#         node = torch.einsum('btij,btjk->btik', edge_map, node)
-#         node = self.relu(node)
-#         #return node.reshape(B, T, -1)
-#         #######################
-#         # new
-#         node = node.permute(0, 1, 3, 2).reshape(-1, self.feat_dim, self.num_node)
-#         node = self.conv1d_merge_node_weight(node)
-#         return node.reshape(B, T, self.feat_dim) # * 10
-#         #######################
-    
-#     def forward(self, bbox, bbox_class, edge_map):
-#         bbox = bbox.permute(0, 3, 1, 2) # B, T, N, 4
-#         bbox_class = bbox_class.permute(0, 2, 1) # B, T, N
-#         edge_map = edge_map.permute(0, 3, 1, 2) # B, T, N, N
-#         bbox_class_embed = self.embedding(bbox_class)
-#         # bbox_embed = self.linear(bbox)
-#         bbox_embed = self.bbox_embedding((bbox * 1280).long()).mean(dim=3)
-#         feature = self.generate_graph_feature(bbox_class_embed, bbox_embed, edge_map)
-
-#         if self.downsample:
-#             return self.layernorm(F.interpolate(feature.permute(0, 2, 1), scale_factor=self.scale_factor, mode='linear'))
-#         else:
-#             return self.layernorm(feature.permute(0, 2, 1))
         
 class GCNBlock(nn.Module):
     """
@@ -950,17 +891,12 @@ class GCNBlock(nn.Module):
         feat_dim = n_embd
         self.feat_dim = feat_dim
         self.num_node = num_node
-        # self.linear = nn.Linear(4, feat_dim)
         self.linear = nn.Linear(4, feat_dim, bias=False)
         self.embedding = nn.Embedding(num_classes, feat_dim, padding_idx=0)
         self.relu = nn.ReLU()
         self.conv2d_1_weight = nn.Conv2d(feat_dim * 2, feat_dim, 1, 1, 0, bias=False)
-        #self.conv2d_2_weight = nn.Conv2d(feat_dim, feat_dim // 2, 1, 1, 0, bias=False)
-        #######################
-        # new
         self.conv2d_2_weight = nn.Conv2d(feat_dim, feat_dim, 1, 1, 0, bias=False)
         self.conv1d_merge_node_weight = nn.Conv1d(feat_dim, feat_dim, num_node, 1, 0, bias=False)
-        #######################
         self.layernorm = LayerNorm(self.feat_dim)
         self.downsample = downsample
         self.scale_factor = scale_factor
@@ -974,13 +910,9 @@ class GCNBlock(nn.Module):
         node = self.conv2d_2_weight(node).permute(0, 2, 3, 1) # becomes (B, T, N, C)
         node = torch.einsum('btij,btjk->btik', edge_map, node)
         node = self.relu(node)
-        #return node.reshape(B, T, -1)
-        #######################
-        # new
         node = node.permute(0, 1, 3, 2).reshape(-1, self.feat_dim, self.num_node)
         node = self.conv1d_merge_node_weight(node)
-        return node.reshape(B, T, self.feat_dim) # * 10
-        #######################
+        return node.reshape(B, T, self.feat_dim)
     
     def forward(self, bbox, bbox_class, edge_map):
         bbox = bbox.permute(0, 3, 1, 2) # B, T, N, 4
@@ -994,69 +926,6 @@ class GCNBlock(nn.Module):
             return self.layernorm(F.interpolate(feature.permute(0, 2, 1), scale_factor=self.scale_factor, mode='linear'))
         else:
             return self.layernorm(feature.permute(0, 2, 1))
-
-class GCNBlockv2(nn.Module):
-
-    """
-    A simple Graph Convolutional Block
-    """
-    def __init__(
-        self,
-        n_embd,                # dimension of the input features
-        num_node,              # num of node
-        num_classes = 43,      # number of object types
-    ):
-        super().__init__()
-        feat_dim = n_embd
-        self.feat_dim = feat_dim
-        self.num_node = num_node
-        # self.linear = nn.Linear(4, feat_dim)
-        self.linear = nn.Linear(4, feat_dim, bias=False)
-        self.embedding = nn.Embedding(num_classes, feat_dim, padding_idx=0)
-        self.relu = nn.ReLU()
-        self.conv2d_11_weight = nn.Conv2d(feat_dim * 2, feat_dim, 1, 1, 0, bias=False)
-        self.conv2d_12_weight = nn.Conv2d(feat_dim, feat_dim, 1, 1, 0, bias=False)
-        self.conv2d_21_weight = nn.Conv2d(feat_dim * 2, feat_dim, 1, 1, 0, bias=False)
-        self.conv2d_22_weight = nn.Conv2d(feat_dim, feat_dim, 1, 1, 0, bias=False)
-
-
-
-    def generate_graph_feature(self, bbox, bbox_class, edge_map):
-        B, T, N, C = bbox_class.size()
-        node = torch.cat((bbox, bbox_class), dim=3).permute(0, 3, 1, 2) # becomes (B, C, T, N)
-        
-        node1 = self.conv2d_11_weight(node).permute(0, 2, 3, 1) # becomes (B, T, N, C)
-        node1 = torch.einsum('btij,btjk->btik', edge_map, node1)
-        node1 = self.relu(node1).permute(0, 3, 1, 2) # becomes (B, C, T, N)
-        node1 = self.conv2d_12_weight(node1).permute(0, 2, 3, 1) # becomes (B, T, N, C)
-        node1 = torch.einsum('btij,btjk->btik', edge_map, node1)
-        node1 = self.relu(node1)
-
-        node2 = self.conv2d_21_weight(node).permute(0, 2, 3, 1) # becomes (B, T, N, C)
-        node2 = torch.einsum('btij,btjk->btik', edge_map, node2)
-        node2 = self.relu(node2).permute(0, 3, 1, 2) # becomes (B, C, T, N)
-        node2 = self.conv2d_22_weight(node2).permute(0, 2, 3, 1) # becomes (B, T, N, C)
-        node2 = torch.einsum('btij,btjk->btik', edge_map, node2)
-        node2 = self.relu(node2)
-        #return node.reshape(B, T, -1)
-        #######################
-        # new
-        node1 = node1.permute(0, 1, 3, 2).reshape(-1, self.feat_dim, self.num_node)
-        node2 = node2.permute(0, 1, 3, 2).reshape(-1, self.feat_dim, self.num_node)
-        node2 = torch.softmax(node2, dim=2)
-        final_node = torch.sum(node1 * node2, 2)
-        return final_node.reshape(B, T, self.feat_dim) # * 10
-        #######################
-    
-    def forward(self, bbox, bbox_class, edge_map):
-        bbox = bbox.permute(0, 3, 1, 2) # B, T, N, 4
-        bbox_class = bbox_class.permute(0, 2, 1) # B, T, N
-        edge_map = edge_map.permute(0, 3, 1, 2) # B, T, N, N
-        bbox_class_embed = self.embedding(bbox_class)
-        bbox_embed = self.linear(bbox)
-        feature = self.generate_graph_feature(bbox_class_embed, bbox_embed, edge_map)
-        return feature.permute(0, 2, 1)
-
 
 
 class OF_module(nn.Module):
@@ -1080,17 +949,3 @@ class OF_module(nn.Module):
         )
     def forward(self, x):
         return self.main(x)
-
-
-
-
-# if __name__ == '__main__':
-#     print('zz')
-#     model = GCNBlock(512, 40)
-
-#     bbox = torch.zeros((2, 40, 4, 10))
-#     bbox_class = torch.ones((2, 40, 10)).long()
-#     edge_map = torch.ones((2, 40, 40, 10))
-
-#     output = model(bbox, bbox_class, edge_map)
-#     print(output)

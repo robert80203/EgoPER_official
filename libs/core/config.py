@@ -25,9 +25,11 @@ DEFAULTS = {
         "width": 1280,
         # ratio of BG segments
         "background_ratio": 0.3,
-        # num of graph node
+        # num of objects of each frame
         "num_node": 20,
+        # if using AOD
         "use_gcn": False,
+        # task name
         "task": 'coffee',
     },
     "loader": {
@@ -99,15 +101,12 @@ DEFAULTS = {
         "droppath": 0.1,
         # if to use label smoothing (>0.0)
         "label_smoothing": 0.0,
+        # is using contrastive loss
         "contrastive": False,
-        # "pretrain_contrastive": False,
-        # "cl_level": 1,
+        # weight for contrastive loss
         "cl_weight": 0.1,
-        # "clsemb_drop_rate": 0.0,
-        # "cl_clip_thres": 1000.0, # if larger than 1, this parameter means nothing
+        # num of negative segments
         "num_negative_segments": 2,
-        # "use_equal_focal": False,
-        # "use_smooth_loss": False,
     },
     "test_cfg": {
         "pre_nms_thresh": 0.001,

@@ -16,17 +16,8 @@ import torch.backends.cudnn as cudnn
 # our code
 from libs.core import load_config
 from libs.modeling import make_meta_arch
-from libs.datasets import make_dataset, make_data_loader, generate_time_stamp_labels, to_frame_wise, to_segments
+from libs.datasets import make_dataset, make_data_loader, to_frame_wise, to_segments
 from libs.utils import valid_one_epoch, fix_random_seed
-
-
-# def to_frame_wise(segments, labels, scores, length, fps=1):
-#     preds = torch.zeros((length)) + 0 #0 always the bg class
-#     asce_scores, indices = torch.sort(scores, 0)
-#     for j in indices:
-#         if segments[j, 1] != segments[j, 0]: #and scores[j] > 0.3:
-#             preds[int(segments[j, 0])*fps:int(segments[j, 1])*fps] = labels[j]
-#     return preds.long().numpy()
 
 ################################################################################
 def main(args):
@@ -55,7 +46,6 @@ def main(args):
 
     if args.topk > 0:
         cfg['model']['test_cfg']['max_seg_num'] = args.topk
-    #pprint(cfg)
 
     """1. fix all randomness"""
     # fix the random seeds (this will fix everything)
@@ -65,7 +55,6 @@ def main(args):
     train_dataset = make_dataset(
         cfg['dataset_name'], False, cfg['train_split'], **cfg['dataset']
     )
-    # train_dataset.no_feat_stride = True
     # set bs = 1, and disable shuffle
     train_loader = make_data_loader(
         train_dataset, False, None, 1, cfg['loader']['num_workers']
@@ -73,7 +62,6 @@ def main(args):
     val_dataset = make_dataset(
         cfg['dataset_name'], False, cfg['val_split'], **cfg['dataset']
     )
-    # val_dataset.no_feat_stride = True
     # set bs = 1, and disable shuffle
     val_loader = make_data_loader(
         val_dataset, False, None, 1, cfg['loader']['num_workers']
@@ -82,7 +70,6 @@ def main(args):
     test_dataset = make_dataset(
         cfg['dataset_name'], False, cfg['test_split'], **cfg['dataset']
     )
-    # test_dataset.no_feat_stride = True
     # set bs = 1, and disable shuffle
     test_loader = make_data_loader(
         test_dataset, False, None, 1, cfg['loader']['num_workers']
@@ -91,8 +78,10 @@ def main(args):
     """3. create model and evaluator"""
     # model
     model = make_meta_arch(cfg['model_name'], **cfg['model'])
-    model.init_prototypes()
-    # not ideal for multi GPU training, ok for now
+    
+    # model.init_prototypes()
+
+    # not ideal for multi GPU training
     model = nn.DataParallel(model, device_ids=cfg['devices'])
 
     """4. load ckpt"""
@@ -107,35 +96,32 @@ def main(args):
     model.load_state_dict(checkpoint['state_dict_ema'])
     del checkpoint
 
-
     output_name = 'pred_seg_results_'
-
 
     """5. Test the model"""
     print("\nStart testing model {:s} ...".format(cfg['model_name']))
-    print_freq = 20
-    #start = time.time()
+    print_freq = args.print_freq
     """Test the model on the validation set"""
     model.eval()
     
     # loop over training set
-
     for iter_idx, video_list in enumerate(train_loader, 0):
         with torch.no_grad():
             output = model(video_list)
+            # initialize the step prototypes
             if iter_idx == 0:
                 model(video_list, mode='clustering_init')
+            # update the step prototypes
             model(video_list, mode='clustering')
+            # use all videos in the training set, or set a limit
             if iter_idx == len(train_loader) - 1 or iter_idx >= 500:
                 model(video_list, mode='clustering_flush')
                 break
-        # printing
         if (iter_idx != 0) and iter_idx % (print_freq) == 0:
             torch.cuda.synchronize()
             print('Train: [{0:05d}/{1:05d}]\t'.format(iter_idx, len(train_loader)))
 
     print('Training set done!')
-    # 1004, should not use gt to get threhold
     print('Size of validation set:', len(val_loader))
 
     for iter_idx, video_list in enumerate(val_loader, 0):
@@ -143,9 +129,11 @@ def main(args):
             output = model(video_list)
             num_vids = len(output)
             for vid_idx in range(num_vids):
+                # generate frame-wise prediction
                 preds = to_frame_wise(output[vid_idx]['segments'], output[vid_idx]['labels'],
                                     output[vid_idx]['scores'], video_list[vid_idx]['feats'].size(1), 
                                     fps=video_list[vid_idx]['fps'])
+                # use the frame-wise prediction to generate action labels and time stamps
                 action_labels, time_stamp_labels = to_segments(preds)
                 video_list[vid_idx]['segments'] = torch.tensor(time_stamp_labels)
                 video_list[vid_idx]['labels'] = torch.tensor(action_labels).long()
@@ -169,11 +157,11 @@ def main(args):
             # forward the model (wo. grad)
             with torch.no_grad():
                 
+                # predict segments (boundaries and action steps)
                 output = model(video_list)
                 num_vids = len(output)
                 for vid_idx in range(num_vids):
                     # generate frame-wise results and re-generate segments
-                    
                     preds = to_frame_wise(output[vid_idx]['segments'], output[vid_idx]['labels'],
                                         output[vid_idx]['scores'], video_list[vid_idx]['feats'].size(1), 
                                         fps=video_list[vid_idx]['fps'])
@@ -182,16 +170,15 @@ def main(args):
                     video_list[vid_idx]['segments'] = torch.tensor(time_stamp_labels)
                     video_list[vid_idx]['labels'] = torch.tensor(action_labels).long()
 
+                # perform error detection
                 output = model(video_list, mode=args.mode, threshold=threshold)
 
-                # unpack the results into ANet format
                 num_vids = len(output)
                 for vid_idx in range(num_vids):
                     if output[vid_idx]['segments'].shape[0] > 0:
                         video_id = output[vid_idx]['video_id']
                         if video_id not in results:
                             results[video_id] = {}
-                        
                         results[video_id]['segments'] = output[vid_idx]['segments'].numpy()
                         results[video_id]['label'] = output[vid_idx]['labels'].numpy()
                         results[video_id]['score'] = output[vid_idx]['scores'].numpy()
@@ -223,8 +210,8 @@ if __name__ == '__main__':
                         help='max number of output actions (default: -1)')
     parser.add_argument('--saveonly', action='store_true',
                         help='Only save the ouputs without evaluation (e.g., for test set)')
-    parser.add_argument('-p', '--print-freq', default=10, type=int,
-                        help='print frequency (default: 10 iterations)')
+    parser.add_argument('-p', '--print-freq', default=20, type=int,
+                        help='print frequency (default: 20 iterations)')
     parser.add_argument('--threshold', default=0.5, type=float)
     parser.add_argument('--mode', default='similarity', type=str)  
     parser.add_argument('--score', action='store_true')       

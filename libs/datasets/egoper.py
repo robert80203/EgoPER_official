@@ -12,19 +12,19 @@ from .data_utils import truncate_feats, generate_node_connected
 class EgoPERdataset(Dataset):
     def __init__(
         self,
-        is_training,     # if in training mode
-        split,           # split, a tuple/list allowing concat of subsets
-        default_fps,     # default fps
-        max_seq_len,     # maximum sequence length during training
-        trunc_thresh,    # threshold for truncate an action segment
-        crop_ratio,      # a tuple (e.g., (0.9, 1.0)) for random cropping
-        height,
-        width,
-        num_classes,
-        background_ratio, # ratio of sampled background
-        num_node,       # num of nodes in a graph
-        use_gcn,
-        task,
+        is_training,        # if in training mode
+        split,              # split, a tuple/list allowing concat of subsets
+        default_fps,        # default fps
+        max_seq_len,        # maximum sequence length during training
+        trunc_thresh,       # threshold for truncate an action segment
+        crop_ratio,         # a tuple (e.g., (0.9, 1.0)) for random cropping
+        height,             # height of the frame (default: 720)
+        width,              # width of the frame (default: 1280)
+        num_classes,        # num of action classes
+        background_ratio,   # ratio of sampled background
+        num_node,           # num of nodes in a graph
+        use_gcn,            # if using AOD
+        task,               # task name
     ):
 
         root_dir = '/mnt/raptor/datasets/EgoPER'
@@ -79,15 +79,6 @@ class EgoPERdataset(Dataset):
                     self.bbox_classes[video_id] = bbox_class
                     self.edge_maps[video_id] = edge_map
 
-        # self.db_attributes = {
-        #     'dataset_name': 'oatmeal',
-        #     'tiou_thresholds': np.linspace(0.3, 0.7, 5),
-        #     'empty_label_ids': [],
-        # }  
-    
-    # def get_attributes(self):
-    #     return self.db_attributes
-
     def __len__(self):
         return len(self.data_list)
 
@@ -99,8 +90,6 @@ class EgoPERdataset(Dataset):
         
         feats = np.load(os.path.join(self.feat_path, video_id+'.npy'))
 
-        
-        
         # ignore some background segments
         if self.is_training:
             delete_idx = []
@@ -131,8 +120,6 @@ class EgoPERdataset(Dataset):
             data_dict['bbox'] = torch.tensor(bbox).float()
             data_dict['edge_map'] = torch.tensor(edge_map).float()
 
-        # if feats.shape[0] != bbox.shape[0]:
-        #     print(feats.shape, bbox.shape, video_id)
 
         # truncate the features during training
         if self.is_training:

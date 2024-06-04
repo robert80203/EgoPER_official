@@ -1,3 +1,7 @@
+##############################################################################################
+# The code is modified from ActionFormer: https://github.com/happyharrycn/actionformer_release
+##############################################################################################
+
 # python imports
 import argparse
 import os
@@ -12,7 +16,7 @@ import torch.utils.data
 # for visualization
 from torch.utils.tensorboard import SummaryWriter
 
-# our code
+# our implementation
 from libs.core import load_config
 from libs.datasets import make_dataset, make_data_loader
 from libs.modeling import make_meta_arch
@@ -61,9 +65,6 @@ def main(args):
     train_dataset = make_dataset(
         cfg['dataset_name'], True, cfg['train_split'], **cfg['dataset']
     )
-    # update cfg based on dataset attributes (fix to epic-kitchens)
-    # train_db_vars = train_dataset.get_attributes()
-    # cfg['model']['train_cfg']['head_empty_cls'] = train_db_vars['empty_label_ids']
 
     # data loaders
     train_loader = make_data_loader(
@@ -177,7 +178,8 @@ if __name__ == '__main__':
                         help='print frequency (default: 2 iterations)')
     parser.add_argument('-c', '--ckpt-freq', default=5, type=int,
                         help='checkpoint frequency (default: every 5 epochs)')
-    parser.add_argument('--maxvideos', default=15, type=int)
+    parser.add_argument('--maxvideos', default=15, type=int,
+                        help='number of training videos in each prototype (maxvideos * batch size)')
     parser.add_argument('--output', default='', type=str,
                         help='name of exp folder (default: none)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',

@@ -190,9 +190,9 @@ class PtTransformer_CSPL_GCN(nn.Module):
         use_abs_pe,            # if to use abs position encoding
         use_rel_pe,            # if to use rel position encoding
         num_classes,           # number of action classes
-        num_normal_clusters,   # number of normal step clusters
+        num_normal_clusters,   # number of step clusters
         use_gcn,               # use AOD
-        num_node,
+        num_node,              # num of node in each frame
         train_cfg,             # other cfg for training
         test_cfg               # other cfg for testing
     ):
@@ -216,7 +216,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
         max_div_factor = 1
         for l, (s, w) in enumerate(zip(self.fpn_strides, self.mha_win_size)):
             stride = s * (w // 2) * 2 if w > 1 else s
-            #print(stride)
             assert max_seq_len % stride == 0, "max_seq_len must be divisible by fpn stride and window size"
             if max_div_factor < stride:
                 max_div_factor = stride
@@ -234,8 +233,8 @@ class PtTransformer_CSPL_GCN(nn.Module):
         self.cl_weight = train_cfg['cl_weight']
         self.num_negative_segments = train_cfg['num_negative_segments']
         self.use_contrastive = train_cfg['contrastive']
-        #self.tao_bias = nn.Parameter(torch.tensor(1.0))
         self.tao_bias = 1.0
+        # step prototypes
         self.num_normal_clusters = num_normal_clusters
         if self.num_normal_clusters > 1:
             self.normal_cluster_models = {}
@@ -369,7 +368,7 @@ class PtTransformer_CSPL_GCN(nn.Module):
             num_layers=self.head_num_layers,
             empty_cls=self.train_cfg['head_empty_cls']
         )
-
+    # initialize the step prototypes
     def init_prototypes(self):
         self.prototypes = {}
         self.threshold_dict = {}
@@ -382,8 +381,10 @@ class PtTransformer_CSPL_GCN(nn.Module):
             for i in range(self.num_classes):
                 self.normal_cluster_models[str(i)] = KMeans(n_clusters=self.num_normal_clusters, verbose=False)
     
+    # perform average over frames in the prorotypes to generate final prorotype vectors
     def flush_prototypes(self):
         for key, value in self.prototypes.items():
+            # skip of no frame in the prototype
             if value is None:
                 continue
 
@@ -400,6 +401,7 @@ class PtTransformer_CSPL_GCN(nn.Module):
             else:
                 self.prototypes[key] = value.mean(dim=1, keepdim=True)    
     
+    # add frames into prototypes
     def generate_prototypes(self, fpn_feats, segments, labels):
         for i in range(len(segments)):
             for j in range(len(segments[i])):
@@ -407,7 +409,8 @@ class PtTransformer_CSPL_GCN(nn.Module):
                 end = int(segments[i][j, 1])
                 label = str(labels[i][j].item())
                 if label in self.prototypes:
-                    if start >= end: # prevent nan problem (only happen when using predicted boundary)
+                    # prevent nan problem (only happen when using predicted boundary)
+                    if start >= end: 
                         continue
 
                     feats = fpn_feats[0][i, :, start:end]
@@ -416,7 +419,8 @@ class PtTransformer_CSPL_GCN(nn.Module):
                         self.prototypes[label] = feats.detach()
                     else:
                         self.prototypes[label] = torch.cat((self.prototypes[label], feats.detach()), dim=1)
-
+    
+    # generate thresholds based on validation set
     def get_thresholds(self, fpn_feats, segments, labels):
         for i in range(len(segments)):
             output_labels = []
@@ -435,18 +439,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
                 feats = fpn_feats[0][i, :, start:end]
                 
                 if self.num_normal_clusters > 1:
-                    # best_sims_mean = -1000
-                    # best_sims = None
-                    # best_std = None
-                    # for normal_cluster_idx in range(self.num_normal_clusters):
-                    #     sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
-                    #     if sims.mean() > best_sims_mean:
-                    #         best_sims_mean = sims.mean()
-                    #         best_sims = sims
-                    #         best_std = sims.std()
-                    # sims = best_sims
-                    # std = best_std
-
                     total_sims = None
                     for normal_cluster_idx in range(self.num_normal_clusters):
                         sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
@@ -454,17 +446,19 @@ class PtTransformer_CSPL_GCN(nn.Module):
                             total_sims = sims.unsqueeze(1)
                         else:
                             total_sims = torch.cat((total_sims, sims.unsqueeze(1)), 1)
+                    # choose the highest similarity among prototypes
                     sims, _ = torch.max(total_sims, 1)
                 else:
                     sims = self.cosine_sim(self.prototypes[label], feats)
                 
+                # making similarity between [0, 1], which stablizes the training
                 sims = (sims + 1) / 2
 
                 if self.threshold_dict[label] is None:
                     self.threshold_dict[label] = sims
                 else:
                     self.threshold_dict[label] = torch.cat((self.threshold_dict[label], sims), dim=0)
-
+    
     # compute the similarity only with the prototype of predictied class
     def compute_similarity(self, fpn_feats, segments, labels, video_id, threshold=0.5):
         b_output = []
@@ -476,34 +470,29 @@ class PtTransformer_CSPL_GCN(nn.Module):
                 end = int(segments[i][j, 1])
                 label = str(labels[i][j].item())
                 
+                # prevent nan
                 if start > end:
                     continue
+                # if only one frame in the segment
                 elif start == end:
                     end = start + 1
 
                 feats = fpn_feats[0][i, :, start:end]
 
-                # if prototype does not exist, then assign the segment to BG
+                # if prototype does not exist in the training set, then assign the segment to BG
                 if self.prototypes[label] is None:
                     output_labels.append(-1)
                     output_sim.append(0)
-                # no error in background
+                # if predicted as background, it is always normal
                 elif label == '0':
-                    if threshold >= 2.0:
-                        output_labels.append(-1)
-                    else:
-                        output_labels.append(0)
+                    # if threshold >= 2.0:
+                    #     output_labels.append(-1)
+                    # else:
+                    #     output_labels.append(0)
+                    output_labels.append(0)
                     output_sim.append(1)
                 else:
                     if self.num_normal_clusters > 1:
-                        # best_sims_mean = -1000 #0
-                        # best_sims = None
-                        # for normal_cluster_idx in range(self.num_normal_clusters):
-                        #     sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
-                        #     if sims.mean() > best_sims_mean:
-                        #         best_sims_mean = sims.mean()
-                        #         best_sims = sims
-                        # sims = best_sims
                         total_sims = None
                         for normal_cluster_idx in range(self.num_normal_clusters):
                             sims = self.cosine_sim(self.prototypes[label][normal_cluster_idx], feats)
@@ -515,6 +504,7 @@ class PtTransformer_CSPL_GCN(nn.Module):
                     else:
                         sims = self.cosine_sim(self.prototypes[label], feats)
                     
+                    # making similarity between [0, 1], which stablizes the training
                     sims = (sims + 1) / 2
 
                     # pre-computed threshold with mean and std
@@ -527,6 +517,7 @@ class PtTransformer_CSPL_GCN(nn.Module):
                     
                     thres_cond = sims < thres
                     action_list = torch.ones(sims.size()).long()
+                    # set the frames satisfying the condition as error (-1), otherwise normal (1)
                     action_list[thres_cond] = -1
                     
                     # majority voting for seen classes
@@ -559,11 +550,11 @@ class PtTransformer_CSPL_GCN(nn.Module):
     def forward(self, video_list, mode = 'none', threshold=0.5):
         # batch the video list into feats (B, C, T) and masks (B, 1, T)
         
-        batched_ofs, batched_bboxes, batched_bbox_classes, \
+        batched_bboxes, batched_bbox_classes, \
             batched_edge_maps, batched_inputs, batched_masks = self.preprocessing_gcn(video_list)
 
 
-        feats, masks = self.backbone(batched_ofs, batched_bboxes, batched_bbox_classes,
+        feats, masks = self.backbone(batched_bboxes, batched_bbox_classes,
                                     batched_edge_maps, batched_inputs, batched_masks)
         
         fpn_feats, fpn_masks = self.neck(feats, masks)
@@ -656,9 +647,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
             Generate batched features and masks from a list of dict items
         """
         feats = [x['feats'] for x in video_list]
-        ################################
-        # graph input
-        ################################
         if 'bbox' not in video_list[0]:
             bboxes = None
         else:
@@ -671,11 +659,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
             edge_maps = None
         else:
             edge_maps = [x['edge_map'].permute(1, 2, 0) for x in video_list]
-
-        if 'of' not in video_list[0]:
-            ofs = None
-        else:
-            ofs = [x['of'].permute(1, 0) for x in video_list]
         
         feats_lens = torch.as_tensor([feat.shape[-1] for feat in feats])
         max_len = feats_lens.max(0).values.item()
@@ -718,15 +701,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
                     pad_edge_map[..., :edge_map.shape[-1]].copy_(edge_map)
             else:
                 batched_edge_maps = None
-                
-            # batch of shape B, num_node, T
-            if ofs is not None:
-                batch_ofs_shape = [len(ofs), ofs[0].shape[0], max_len]
-                batched_ofs = ofs[0].new_full(batch_ofs_shape, padding_val)
-                for of, pad_of in zip(ofs, batched_ofs):
-                    pad_of[..., :of.shape[-1]].copy_(of)
-            else:
-                batched_ofs = None
            
         else:
             assert len(video_list) == 1, "Only support batch_size = 1 during inference"
@@ -741,7 +715,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
             padding_bboxes_size = [0, max_len - feats_lens[0]]
             padding_bbox_classes_size = [0, max_len - feats_lens[0]]
             padding_edge_maps_size = [0, max_len - feats_lens[0]]
-            padding_ofs_size = [0, max_len - feats_lens[0]]
 
             batched_inputs = F.pad(
                 feats[0], padding_size, value=padding_val).unsqueeze(0)
@@ -763,12 +736,7 @@ class PtTransformer_CSPL_GCN(nn.Module):
                     edge_maps[0], padding_edge_maps_size, value=padding_val).unsqueeze(0)
             else:
                 batched_edge_maps = None
-            
-            if ofs is not None:
-                batched_ofs = F.pad(
-                    ofs[0], padding_ofs_size, value=padding_val).unsqueeze(0)
-            else:
-                batched_ofs = None
+
         # generate the mask
         batched_masks = torch.arange(max_len)[None, :] < feats_lens[:, None]
 
@@ -780,12 +748,9 @@ class PtTransformer_CSPL_GCN(nn.Module):
             batched_bbox_classes = batched_bbox_classes.to(self.device)
         if batched_edge_maps is not None:
             batched_edge_maps = batched_edge_maps.to(self.device)
-        if batched_ofs is not None:
-            batched_ofs = batched_ofs.to(self.device)
         batched_masks = batched_masks.unsqueeze(1).to(self.device)
 
-        # return batched_bboxes, batched_bbox_classes, batched_edge_maps, batched_inputs, batched_masks
-        return batched_ofs, batched_bboxes, batched_bbox_classes, batched_edge_maps, batched_inputs, batched_masks
+        return batched_bboxes, batched_bbox_classes, batched_edge_maps, batched_inputs, batched_masks
 
     @torch.no_grad()
     def label_points(self, points, gt_segments, gt_labels):
@@ -838,8 +803,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
             # center sampling based on stride radius
             # compute the new boundaries:
             # concat_points[:, 3] stores the stride
-            # print('cernter', center_pts, center_pts.size())
-            # print('concat', concat_points[:, 3, None], concat_points[:, 3, None].size())
             t_mins = \
                 center_pts - concat_points[:, 3, None] * self.train_center_sample_radius
             t_maxs = \
@@ -933,27 +896,11 @@ class PtTransformer_CSPL_GCN(nn.Module):
         gt_target *= 1 - self.train_label_smoothing
         gt_target += self.train_label_smoothing / (self.num_classes + 1)
 
-        # focal loss
-        #print(gt_target, gt_target.size())
-
-        # print(out_cls_logits[0].size(), out_cls_logits[1].size())
-        # cls_loss = sigmoid_focal_loss(
-        #     torch.cat(out_cls_logits, dim=1)[valid_mask],
-        #     gt_target,
-        #     reduction='sum',
-        # )
-
         cls_loss = sigmoid_focal_loss(
             torch.cat(out_cls_logits, dim=1)[valid_mask],
             gt_target,
             reduction='sum',
         )
-
-        # if self.use_smooth_loss:
-        #     sm_loss = smooth_loss(out_cls_logits, valid_mask)
-        # else:
-        #     sm_loss = torch.tensor(0.0)
-
         
         cls_loss /= self.loss_normalizer
 
@@ -989,12 +936,9 @@ class PtTransformer_CSPL_GCN(nn.Module):
 
         for i in range(len(video_list)):
             num_segments = len(video_list[i]['segments'])
-            # num_sample = num_segments
-            # non-repeative sampling
-            # sample_segments = random.sample(range(num_segments), num_sample)
 
             # traverse segments
-            for j in range(num_segments):#sample_segments:
+            for j in range(num_segments):
                 p_start = int(video_list[i]['segments'][j][0])
                 p_end = int(video_list[i]['segments'][j][1])
                 p_label = str(video_list[i]['labels'][j].item())
@@ -1018,13 +962,13 @@ class PtTransformer_CSPL_GCN(nn.Module):
                         n_end_list.append(n_end)
                         n_label_list.append(n_label)
                         n_v_idx_list.append(n_v_idx)
+                
                 # avoid nan problem
                 if p_start >= p_end:
                     continue
                 if self.prototypes[p_label] is None:
                     continue
                 
-                # traverse every level of fpn
                 numerator = None
                 denominator = None
 
@@ -1040,16 +984,12 @@ class PtTransformer_CSPL_GCN(nn.Module):
                             best_sims_mean = sims.mean()
                             best_sims = sims
                             best_normal_cluster_idx = normal_cluster_idx
-                    # pos_scores = best_sims
+                    # making similarity between [0, 1], which stablizes the training
                     pos_scores = (best_sims + 1) / 2
                 else:
-                    # pos_scores = self.cosine_sim(self.prototypes[p_label], pos_feats)
+                    # making similarity between [0, 1], which stablizes the training
                     pos_scores = (self.cosine_sim(self.prototypes[p_label], pos_feats) + 1) / 2
                 
-                # if numerator is None:
-                #     numerator = torch.exp(pos_scores / self.tao_bias)
-                # else:
-                #     numerator = torch.cat((numerator, torch.exp(pos_scores / self.tao_bias)), dim=0)
                 numerator = torch.exp(pos_scores / self.tao_bias)
                 
                 # compute negative scores
@@ -1063,15 +1003,14 @@ class PtTransformer_CSPL_GCN(nn.Module):
                     # avoid nan problem
                     if n_start >= n_end:
                         continue
-                    # assert n_start < n_end
 
                     neg_feats = fpn_feats[0][n_v_idx, :, n_start:n_end]
                     
                     if self.num_normal_clusters > 1:
-                        # neg_scores = self.cosine_sim(self.prototypes[p_label][best_normal_cluster_idx], neg_feats)
+                        # making similarity between [0, 1], which stablizes the training
                         neg_scores = (self.cosine_sim(self.prototypes[p_label][best_normal_cluster_idx], neg_feats) + 1) / 2
                     else:
-                        # neg_scores = self.cosine_sim(self.prototypes[p_label], neg_feats)
+                        # making similarity between [0, 1], which stablizes the training
                         neg_scores = (self.cosine_sim(self.prototypes[p_label], neg_feats) + 1) / 2
                     
                     if denominator is None:
@@ -1085,123 +1024,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
 
         return - cl_loss / factor
 
-    # def contrastive_loss(self, fpn_feats, video_list):
-    #     cl_loss = 0
-    #     factor = 0
-    #     num_negative_samples = self.num_negative_segments
-
-    #     for i in range(len(video_list)):
-    #         num_segments = len(video_list[i]['segments'])
-    #         num_sample = num_segments
-    #         # non-repeative sampling
-    #         sample_segments = random.sample(range(num_segments), num_sample)
-    #         factor += len(sample_segments)
-
-    #         # traverse segments
-    #         for j in sample_segments:
-    #             p_start = int(video_list[i]['segments'][j][0])
-    #             p_end = int(video_list[i]['segments'][j][1])
-
-    #             p_label = str(video_list[i]['labels'][j].item())
-    #             n_start_list = []
-    #             n_end_list = []
-    #             n_label_list = []
-    #             n_v_idx_list = []
-                
-    #             # select negative segments across batch
-    #             while len(n_start_list) < num_negative_samples:
-    #                 n_v_idx = random.randint(0, len(video_list)-1)
-    #                 n_idx = random.randint(0, len(video_list[n_v_idx]['labels'])-1)
-    #                 n_label = str(video_list[n_v_idx]['labels'][n_idx].item())
-    #                 n_start = int(video_list[n_v_idx]['segments'][n_idx][0])
-    #                 n_end = int(video_list[n_v_idx]['segments'][n_idx][1])
-                    
-    #                 # the selected segment cannot be the same label as positive one and start time != end time
-    #                 if n_label != p_label and n_start != n_end:
-    #                     n_start_list.append(n_start)
-    #                     n_end_list.append(n_end)
-    #                     n_label_list.append(n_label)
-    #                     n_v_idx_list.append(n_v_idx)
-                
-    #             # traverse every level of fpn
-    #             numerator = None
-    #             denominator = None
-                
-    #             # avoid nan problem
-    #             if p_start >= p_end:
-    #                 continue
-    #             if self.prototypes[p_label] is None:
-    #                 continue
-
-    #             # assert p_start < p_end
-                
-    #             pos_feats = fpn_feats[0][i, :, p_start:p_end]
-                
-    #             # compute positive scores
-                
-    #             # assert self.prototypes[p_label] is not None
-
-    #             if self.num_normal_clusters > 1:
-    #                 best_sims_mean = -10000
-    #                 best_sims = None
-    #                 best_normal_cluster_idx = -1
-    #                 for normal_cluster_idx in range(self.num_normal_clusters):
-    #                     sims = self.cosine_sim(self.prototypes[p_label][normal_cluster_idx], pos_feats)
-    #                     if best_sims is None or sims.mean() > best_sims_mean:
-    #                         best_sims_mean = sims.mean()
-    #                         best_sims = sims
-    #                         best_normal_cluster_idx = normal_cluster_idx
-    #                 # pos_scores = best_sims
-    #                 pos_scores = (best_sims + 1) / 2
-    #             else:
-    #                 # pos_scores = self.cosine_sim(self.prototypes[p_label], pos_feats)
-    #                 pos_scores = (self.cosine_sim(self.prototypes[p_label], pos_feats) + 1) / 2
-                
-    #             if numerator is None:
-    #                 numerator = torch.exp(pos_scores / self.tao_bias)
-    #             else:
-    #                 numerator = torch.cat((numerator, torch.exp(pos_scores / self.tao_bias)), dim=0)
-                
-    #             # compute negative scores
-    #             for l in range(len(n_start_list)):
-    #                 n_start = n_start_list[l]
-    #                 n_end = n_end_list[l]
-                    
-    #                 n_label = n_label_list[l]
-    #                 n_v_idx = n_v_idx_list[l]
-
-    #                 # avoid nan problem
-    #                 if n_start >= n_end:
-    #                     continue
-    #                 # assert n_start < n_end
-
-    #                 neg_feats = fpn_feats[0][n_v_idx, :, n_start:n_end]
-                    
-
-    #                 if self.num_normal_clusters > 1:
-    #                     # neg_scores = self.cosine_sim(self.prototypes[p_label][best_normal_cluster_idx], neg_feats)
-    #                     neg_scores = (self.cosine_sim(self.prototypes[p_label][best_normal_cluster_idx], neg_feats) + 1) / 2
-    #                 else:
-    #                     # neg_scores = self.cosine_sim(self.prototypes[p_label], neg_feats)
-    #                     neg_scores = (self.cosine_sim(self.prototypes[p_label], neg_feats) + 1) / 2
-                    
-    #                 if denominator is None:
-    #                     denominator = torch.exp(neg_scores / self.tao_bias)
-    #                 else:
-    #                     denominator = torch.cat((denominator, torch.exp(neg_scores / self.tao_bias)), dim=0)
-    #             # infoNCE loss
-    #             cl_loss += torch.log(numerator.sum(dim=0) / (numerator.sum(dim=0) + denominator.sum(dim=0)))
-    #             # cl_loss += torch.log(numerator.mean(dim=0) / (numerator.mean(dim=0) + denominator.mean(dim=0)))
-        
-    #     # if self.pre_cl_loss == None:
-    #     #     self.pre_cl_loss = torch.abs(cl_loss)
-    #     #     factor = 1.0
-    #     # else:
-    #     #     factor = torch.abs(self.pre_cl_loss - torch.abs(cl_loss)) / self.pre_cl_loss
-    #     #     factor = torch.clamp(factor, min=1.0).detach()
-    #     #     self.pre_cl_loss = torch.abs(cl_loss)
-
-    #     return - cl_loss / factor
 
     @torch.no_grad()
     def inference(
@@ -1244,8 +1066,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
             results_per_vid['video_id'] = vidx
             results_per_vid['fps'] = fps
             results_per_vid['duration'] = vlen
-            # results_per_vid['feat_stride'] = stride
-            # results_per_vid['feat_num_frames'] = nframes
             results.append(results_per_vid)
 
         # step 3: postprocssing
@@ -1335,13 +1155,10 @@ class PtTransformer_CSPL_GCN(nn.Module):
             vidx = results_per_vid['video_id']
             fps = results_per_vid['fps']
             vlen = results_per_vid['duration']
-            # stride = results_per_vid['feat_stride']
-            # nframes = results_per_vid['feat_num_frames']
             # 1: unpack the results and move to CPU
             segs = results_per_vid['segments'].detach().cpu()
             scores = results_per_vid['scores'].detach().cpu()
             labels = results_per_vid['labels'].detach().cpu()
-            # 1004
             scores_all = results_per_vid['scores_all']
             if self.test_nms_method != 'none':
                 # 2: batched nms (only implemented on CPU)
@@ -1358,7 +1175,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
 
                 # 3: convert from feature grids to seconds
                 if segs.shape[0] > 0:
-                    # segs = (segs * stride + 0.5 * nframes) / fps
                     segs = segs / fps
                     # truncate all boundaries within [0, duration]
                     segs[segs<=0.0] *= 0.0
@@ -1366,7 +1182,6 @@ class PtTransformer_CSPL_GCN(nn.Module):
 
             else: # just return the results of original length
                 num_frames = int(vlen * fps)
-                #print(segs.size(), scores.size(), labels.size(), num_frames)
                 segs = segs[:num_frames,:]
                 scores = scores[:num_frames]
                 labels = labels[:num_frames]
@@ -1377,7 +1192,7 @@ class PtTransformer_CSPL_GCN(nn.Module):
                  'segments' : segs,
                  'scores'   : scores,
                  'labels'   : labels,
-                 'scores_all': scores_all} #1004
+                 'scores_all': scores_all}
             )
 
         return processed_results

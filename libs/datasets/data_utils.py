@@ -5,6 +5,8 @@ import numpy as np
 import random
 import torch
 
+# generate time stamps from frame-wise labels
+# label: (num of frames,)
 def to_segments(labels):
     pre_label = None
     pre_idx = 0
@@ -24,6 +26,8 @@ def to_segments(labels):
     segments.append([pre_idx, i])
     return output_labels, segments
 
+# generate frame-wise labels time stamps
+# segments: (num of segments, 2), labels: (num of segments,), scores: (num of segments,)
 def to_frame_wise(segments, labels, scores, length, default_cls=0, fps=1):
     preds = torch.zeros((length)) + default_cls
     if scores is None:
@@ -39,11 +43,8 @@ def to_frame_wise(segments, labels, scores, length, default_cls=0, fps=1):
 
     return preds.long()
 
+# generate fixed-size object classes, object bboxes, and edge maps
 def generate_node_connected(object_info, num_node, height, width, remove_unknown=False):
-    # gt_object_info = copy.deepcopy(object_info) #object_info.copy()
-    # input_object_info = copy.deepcopy(object_info) #object_info.copy()
-    # new_object_feature = np.copy(object_feature)
-
     # generate input connected map
     for i in range(len(object_info)):
         connected_input_map = np.zeros((num_node, num_node))
@@ -106,116 +107,12 @@ def generate_node_connected(object_info, num_node, height, width, remove_unknown
 
     return object_cate_all, object_bbox_all, connected_input_map_all 
 
-# output: [N, 2], indiaction start and end time (frame-based)
-def generate_time_stamp_labels(labels, ignore_idx, background_ignore_ratio=0.3):
-    pre_class = None
-    pre_index = None
-    time_stamp_labels = None
-    action_labels = None
-    for i in range(len(labels)):
-        if pre_class is None:
-            pre_class = labels[i]
-            pre_index = 0
-        else:
-            # flush
-            if pre_class != labels[i]:
-                if pre_class != ignore_idx:
-                    if time_stamp_labels is None:
-                        # partially ignore some background segment
-                        if pre_class != 0 or (pre_class == 0 and random.random() < background_ignore_ratio):
-                            time_stamp_labels = np.array([[pre_index, i]])#i-1
-                            action_labels = np.array([pre_class])
-                    else:
-                        # partially ignore some background segment
-                        if pre_class != 0 or (pre_class == 0 and random.random() < background_ignore_ratio):
-                            time_stamp_labels = np.concatenate((time_stamp_labels, np.array([[pre_index, i]])), axis=0)
-                            action_labels = np.concatenate((action_labels, np.array([pre_class])), axis=0)
-                pre_index = i
-            pre_class = labels[i]
-    # the entire sequence are the same label:
-    if time_stamp_labels is None:
-        return np.array([pre_class]), np.array([[0, len(labels)]])
-    else:
-        if pre_class != ignore_idx:
-            time_stamp_labels = np.concatenate((time_stamp_labels, np.array([[pre_index, len(labels)]])), axis=0)
-            action_labels = np.concatenate((action_labels, np.array([pre_class])), axis=0)
-        return action_labels, time_stamp_labels
-
-
-# output: [N], [N], [N, 2], which indicates start and end time (frame-based)
-def generate_time_stamp_labels_error(labels, labels_error, ignore_idx, background_ratio=1.0):
-    pre_class = None
-    pre_class_error = None
-    pre_index = None
-    time_stamp_labels = None
-    action_labels = None
-    action_labels_error = None
-    for i in range(len(labels)):
-        if pre_class is None:
-            pre_class = labels[i]
-            pre_class_error = labels_error[i]
-            pre_index = 0
-        else:
-            # flush
-            if pre_class != labels[i]:
-                if pre_class != ignore_idx:
-                    if time_stamp_labels is None:
-                        if pre_class != 0 or (pre_class == 0 and random.random() < background_ratio):
-                            time_stamp_labels = np.array([[pre_index, i]])
-                            action_labels = np.array([pre_class])
-                            action_labels_error = np.array([pre_class_error])
-                    else:
-                        if pre_class != 0 or (pre_class == 0 and random.random() < background_ratio):
-                            time_stamp_labels = np.concatenate((time_stamp_labels, np.array([[pre_index, i]])), axis=0)
-                            action_labels = np.concatenate((action_labels, np.array([pre_class])), axis=0)
-                            action_labels_error = np.concatenate((action_labels_error, np.array([pre_class_error])), axis=0)
-                pre_index = i
-            pre_class = labels[i]
-            pre_class_error = labels_error[i]
-    time_stamp_labels = np.concatenate((time_stamp_labels, np.array([[pre_index, len(labels)]])), axis=0)
-    action_labels = np.concatenate((action_labels, np.array([pre_class])), axis=0)
-    action_labels_error = np.concatenate((action_labels_error, np.array([pre_class_error])), axis=0)
-    return action_labels, action_labels_error, time_stamp_labels
 
 def trivial_batch_collator(batch):
     """
         A batch collator that does nothing
     """
     return batch
-
-# def worker_init_reset_seed(worker_id):
-#     """
-#         Reset random seed for each worker
-#     """
-#     seed = torch.initial_seed() % 2 ** 31
-#     np.random.seed(seed)
-#     random.seed(seed)
-#     os.environ["PYTHONHASHSEED"] = str(seed)
-
-
-# new version 11/17
-# def truncate_feats(
-#     data_dict,
-#     max_seq_len,
-#     crop_ratio=None
-# ):
-#     feat_len = data_dict['feats'].shape[1]
-
-#     if feat_len <= max_seq_len:
-#         return data_dict
-#     else:
-#         extra_len = max_seq_len - feat_len
-        
-#         if crop_ratio is None:
-#             crop_ratio = [0.4, 0.6]
-#         left_min = crop_ratio[0] * extra_len
-#         left_max = crop_ratio[1] * extra_len
-#         left_crop = random.randint(left_min, left_max)
-#         right_crop = extra_len - left_crop
-
-#         st = left_crop
-#         end = feat_len - right_crop
-#         data_dict['feats'] = data_dict['feats'][:, st:ed].clone()
 
 
 def truncate_feats(
@@ -314,9 +211,6 @@ def truncate_feats(
     # edge map: T x num_node x num_node
     if 'edge_map' in data_dict:
         data_dict['edge_map'] = data_dict['edge_map'][st:ed, :, :]
-    
-    if 'of' in data_dict:
-        data_dict['of'] = data_dict['of'][st:ed, :]
 
     data_dict['start'] = st
     data_dict['end'] = ed

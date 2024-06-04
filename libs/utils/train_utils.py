@@ -14,7 +14,7 @@ import torch.backends.cudnn as cudnn
 from .lr_schedulers import LinearWarmupMultiStepLR, LinearWarmupCosineAnnealingLR
 from .postprocessing import postprocess_results
 from ..modeling import MaskedConv1D, Scale, AffineDropPath, LayerNorm
-from libs.datasets import generate_time_stamp_labels, to_frame_wise
+from libs.datasets import to_segments, to_frame_wise
 
 ################################################################################
 def fix_random_seed(seed, include_cuda=True):
@@ -393,21 +393,12 @@ def valid_one_epoch(
     batch_time = AverageMeter()
     # switch to evaluate mode
     model.eval()
-    # dict for results (for our evaluation code)
-    # results = {
-    #     'video-id': [],
-    #     't-start' : [],
-    #     't-end': [],
-    #     'label': [],
-    #     'score': []
-    # }
     results = {}
     # loop over validation set
     start = time.time()
     for iter_idx, video_list in enumerate(val_loader, 0):
         with torch.no_grad():
             output = model(video_list)
-            # unpack the results into ANet format
             num_vids = len(output)
             for vid_idx in range(num_vids):
                 if output[vid_idx]['segments'].shape[0] > 0:
@@ -418,12 +409,10 @@ def valid_one_epoch(
                     preds = to_frame_wise(output[vid_idx]['segments'], output[vid_idx]['labels'],
                                         output[vid_idx]['scores'], video_list[vid_idx]['feats'].size(1), 
                                         fps=video_list[vid_idx]['fps'])
-                    action_labels, time_stamp_labels = generate_time_stamp_labels(preds, -2)
+                    # action_labels, time_stamp_labels = generate_time_stamp_labels(preds, -2)
+                    action_labels, time_stamp_labels = to_segments(preds)
                     results[video_id]['segments'] = time_stamp_labels
                     results[video_id]['label'] = action_labels
-
-                    # results[video_id]['segments'] = output[vid_idx]['segments'].numpy() * video_list[0]['fps']
-                    # results[video_id]['label'] = output[vid_idx]['labels'].numpy()
                     results[video_id]['score'] = output[vid_idx]['scores'].numpy()
 
 
@@ -438,12 +427,6 @@ def valid_one_epoch(
             print('Test: [{0:05d}/{1:05d}]\t'
                   'Time {batch_time.val:.2f} ({batch_time.avg:.2f})'.format(
                   iter_idx, len(val_loader), batch_time=batch_time))
-
-    # gather all stats and evaluate
-    # results['t-start'] = torch.cat(results['t-start']).numpy()
-    # results['t-end'] = torch.cat(results['t-end']).numpy()
-    # results['label'] = torch.cat(results['label']).numpy()
-    # results['score'] = torch.cat(results['score']).numpy()
 
     if evaluator is not None:
         if ext_score_file is not None and isinstance(ext_score_file, str):

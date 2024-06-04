@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import f1_score, recall_score
 from sklearn.metrics import precision_score, accuracy_score
 from sklearn.metrics import auc
-from libs.datasets.data_utils import generate_time_stamp_labels, to_frame_wise, to_segments
+from libs.datasets.data_utils import to_frame_wise, to_segments
 from eval_utils import Video, Checkpoint, eval_omission_error
 
 # strict version
@@ -120,11 +120,11 @@ def acc_tpr_fpr(all_preds, all_gts):
     
     return acc, tpr, fpr
 
-def acc_precision_recall_f1(all_preds, all_gts, each_class = True):
+def acc_precision_recall_f1(all_preds, all_gts, set_labels, each_class = True):
     if each_class:
         method = None
         acc = None
-        for j in self.set_labels:
+        for j in set_labels:
             each_acc = torch.eq(torch.LongTensor(all_gts[all_gts == j]), torch.LongTensor(all_preds[all_gts == j])).sum() / len(all_gts[all_gts == j])
             if acc is None:
                 acc = each_acc.unsqueeze(0)
@@ -133,8 +133,8 @@ def acc_precision_recall_f1(all_preds, all_gts, each_class = True):
     else:
         method = 'macro'
         acc = torch.eq(torch.LongTensor(all_gts), torch.LongTensor(all_preds)).sum() / len(all_gts)
-    p = precision_score(all_gts, all_preds, labels=self.set_labels, average=method,zero_division=0)
-    r = recall_score(all_gts, all_preds, labels=self.set_labels, average=method,zero_division=0)
+    p = precision_score(all_gts, all_preds, labels=set_labels, average=method,zero_division=0)
+    r = recall_score(all_gts, all_preds, labels=set_labels, average=method,zero_division=0)
 
     f1 = 2 * p * r / (p + r)
     
@@ -436,7 +436,7 @@ class ActionSegmentationErrorDetectionEvaluator:
                 pred_vis(cp_gt, cp_pred, self.idx2action, os.path.join('./visualization/', self.args.dataset, self.args.dirname, 'asch_'+ video_id), category_colors=None)
 
         
-        acc, p, r, f1 = acc_precision_recall_f1(preds, gts, self.set_labels, eval_each_class, bg_to_normal=None)
+        acc, p, r, f1 = acc_precision_recall_f1(preds, gts, self.set_labels, eval_each_class)
         if eval_each_class:
             for j in range(len(self.set_labels)):
                 print("|Action segmentation (cls head, class %d)|%.3f|%.3f|%.3f|%.3f|"%(self.set_labels[j], p[j], r[j], f1[j], acc[j]))
