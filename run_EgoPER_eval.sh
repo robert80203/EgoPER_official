@@ -1,6 +1,5 @@
 # python test_ed.py ./configs/EgoPER/pinwheels_aod_cspl_p4_neg4_bgr1.0.yaml ./ckpt/EgoPER/pinwheels_aod_cspl_p4_neg4_bgr1.0_final
 # python metric_vis.py --task pinwheels --dirname pinwheels_aod_cspl_p4_neg4_bgr1.0_final/ -ed
-
 python test.py ./configs/EgoPER/pinwheels_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/EgoPER/pinwheels_aod_cspl_p2_neg2_bgr1.0_final
 python metric_vis.py --task pinwheels --dirname pinwheels_aod_cspl_p2_neg2_bgr1.0_final/ -as
 python test_ed.py ./configs/EgoPER/pinwheels_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/EgoPER/pinwheels_aod_cspl_p2_neg2_bgr1.0_final

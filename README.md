@@ -5,18 +5,18 @@
 - [Training](#Training)
 - [Inference](#Inference)
 
-This is the official implementation of [Error Detection on Egocentric Procedural Task Videos]()
+This is the official implementation of [Error Detection on Egocentric Procedural Task Videos](https://openaccess.thecvf.com/content/CVPR2024/papers/Lee_Error_Detection_in_Egocentric_Procedural_Task_Videos_CVPR_2024_paper.pdf)
 
 Please cite our CVPR 204 paper if our paper/implementation is helpful for your research:
 
 ```
-@InProceedings{,
-    author    = {},
-    title     = {},
-    booktitle = {},
-    month     = {},
-    year      = {},
-    pages     = {}
+@InProceedings{Lee_2024_CVPR,
+    author    = {Lee, Shih-Po and Lu, Zijia and Zhang, Zekun and Hoai, Minh and Elhamifar, Ehsan},
+    title     = {Error Detection in Egocentric Procedural Task Videos},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+    month     = {June},
+    year      = {2024},
+    pages     = {18655-18666}
 }
 ```
 
@@ -30,7 +30,7 @@ conda env create -f environment.yml
 
 Run setup.py to generate the directories needed
 
-Dowload the dataset and annotations from the following link
+Visit our project page to dowload the dataset and annotations
 [EgoPER dataset]()
 
 - Annotations
@@ -61,15 +61,21 @@ cd preprocessing
 python extract_frames.py
 ```
 
-Generate I3D features based on the video frames with the pre-trained weight kinetics400-rgb-i3d-resnet-50-f32-s2-precise_bn-warmupcosine-bs1024-e196.pth.tar
+Generate I3D features based on the video frames with the [pre-trained weight](https://drive.google.com/file/d/1SF4NduQ7w08wP00IgftZjnRqRYRdppd6/view?usp=sharing)
 
+Move the weight under I3D_extractor/src/feature_extractor/pretrained_models.
 
+Change root_dir in features_{task_name}.sh to correct path, e.g., data/EgoPER/pinwheels and run
+
+```
+mkdir data/EgoPER/pinwheels/features_10fps
+cd I3D_extractor
+./features_pin.sh
+```
 
 ## Training
 
-- Modify root_dir in libs/datasets/egoper.py to the correct directory.
-
-### Model details
+- Modify root_dir in libs/datasets/egoper.py to the correct directory. 
 - The action segmentation backbone is ActionFormer
 - The number of protoypes of each step is 2
 
@@ -79,8 +85,8 @@ Generate I3D features based on the video frames with the pre-trained weight kine
 
 
 ## Inference
+- The code will evaluation the performance of action segmentation and error detection.
 
 ```
 ./run_EgoPER_eval.sh
 ```
-
