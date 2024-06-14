@@ -52,6 +52,8 @@ mkdir data/EgoPER
 mkdir data/EgoPER/pinwheels
 ```
 
+Download annotation.json, active_object.json, mean.npy, and std.npy and put them under data/EgoPER
+
 Create a video and frame folder. Extract pinwheels_videos.zip into the video folder and extract frames from the videos.
 
 ```
