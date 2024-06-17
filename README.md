@@ -41,6 +41,7 @@ Please send an email with the following information to lee.shih@northeastern.edu
 - Emaill Address (with institutional domain name)
 - Purpose
 
+Here are files information in the dataset.
 - Annotations
     - annotation.json: the annotation file of 5 tasks, containing time stamps, step names, step decriptions, and action types.
     - active_object.json: the annotation file of 5 tasks, containing frame-wise object and active object bounding boxes, categories, and if objects are active.
