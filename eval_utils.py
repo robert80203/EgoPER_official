@@ -287,34 +287,32 @@ def computeIoU_acc(s_gt, s_pred, s_graph, last):
 
     return iou, acc
 
-def eval_omission_error(dataset_name, s_preds, s_gts, use_task_graph=True):
+def eval_omission_error(dataset_name, s_preds, s_gts):
     print('===============Dataset:', dataset_name)
     if dataset_name == 'tea':
         edges = [(0, 1), (1, 2), (2, 4), (4, 5), (5, 6), (0, 3), (3, 6), (6, 7), (7, 8), (8, 9), (9, 10), (10, 11)]
-        N = 12 #11
+        N = 12
         last = 11
     elif dataset_name == 'pinwheels':
         edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10), (10, 11), (11, 12), (12, 13), (13, 14)]
-        N = 15 #14
+        N = 15
         last = 14
     elif dataset_name == 'oatmeal':
         edges = [(0, 1), (0, 2), (1, 3), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10), (10, 11), (11, 12)]
-        N = 13 #12
+        N = 13
         last = 12
     elif dataset_name == 'quesadilla':
         edges = [(0, 1), (1, 2), (2, 3), (3, 4), (3, 5), (4, 6), (5, 6), (6, 7), (7, 8), (8, 9)]
-        N = 10 #9
+        N = 10
         last = 9
     elif dataset_name == 'coffee':
-        edges = [(0, 1), (1, 2), (2, 3), (3, 14), (0, 6), (6, 14), (0, 7), (7, 8), (8, 9), (9, 13), (0, 10), (10, 11), (11, 12), (12, 13), (13, 14), (14, 15), (15, 16), (16, 4), (4, 5), (5, 17)]
-        N = 18
-        last = 17
-    if use_task_graph:
-        graph = Graph(edges, N)
-        global_paths = printAllTopologicalOrders(graph)
-    else:
-        with open('/mnt/raptor/shihpo/%s/training_script.json'%(dataset_name), 'r') as fp:
-            global_paths = json.load(fp)
+        edges = [(0, 1), (1, 2), (2, 13), (0, 5), (5, 13), (0, 6), (6, 7), (7, 8), (8, 12), (0, 9), (9, 10), (10, 11), (11, 12), (12, 13), (13, 14), (14, 15), (15, 3), (3, 4), (4, 16)]
+        N = 17
+        last = 16
+
+    # use GT task graph
+    graph = Graph(edges, N)
+    global_paths = printAllTopologicalOrders(graph)
     
     nonrepeat_IoU_list = []
     acc_list = []

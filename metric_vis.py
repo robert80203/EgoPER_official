@@ -212,19 +212,14 @@ class ActionSegmentationErrorDetectionEvaluator:
                 self.data_list = [line.strip('\n') for line in lines]
             with open(os.path.join(root_dir, 'annotation.json'), 'r') as fp:
                 all_annot = json.load(fp)
-            # with open(os.path.join(root_dir, 'action_step.json'), 'r') as fp:
-            #     all_step_annot = json.load(fp)
+            with open(os.path.join(root_dir, 'action_step.json'), 'r') as fp:
+                # all_step_annot = json.load(fp)
+                self.step_annotations = json.load(fp)[task]
             # step_annot = all_step_annot[task]
             # for i in range(len(step_annot)):
             #     video_id = step_annot[i]['video_id']
             #     if video_id in self.data_list:
             #         self.step_annotations[video_id] = step_annot[i]['steps']
-        elif args.dataset == 'HoloAssist':
-            with open(os.path.join(root_dir, 'holoassist', 'test.txt'), 'r') as fp:
-                lines = fp.readlines()
-                self.data_list = [line.strip('\n') for line in lines]
-            with open(os.path.join(root_dir, 'HoloAssist' 'holoassist_annotation.json'), 'r') as fp:
-                all_annot = json.load(fp)
 
         annot = all_annot[task]
         
@@ -482,79 +477,15 @@ class ActionSegmentationErrorDetectionEvaluator:
         with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, 'eval_results.pkl'), "rb") as f:
             results = pickle.load(f)
 
-        # all_gt_action_labels = get_gt_from_sqeuence_list(self.args.dataset, self.action2idx)
-
         all_pred_action_labels = []
         all_gt_action_labels = []
         for video_id in self.data_list:
             gt_segments, gt_labels, gt_label_types, gt_des = self.annotations[video_id]
             labels = torch.tensor(results[video_id]['label'])
-            # print('pred', labels.numpy())
-            # print('gt', self.step_annotations[video_id])
             all_pred_action_labels.append(labels.numpy())
             all_gt_action_labels.append(self.step_annotations[video_id])
 
         eval_omission_error(self.args.task, all_pred_action_labels, all_gt_action_labels)
-
-    def evaluate_random_error_detection(self, eval_each_class=False, combine_bg=True, is_visualize=False):
-        simplified_error_label_dict = {
-            "-1": "Error",
-            "0": "BG",
-            "1": "Normal",
-        }
-
-        gt_labels, gt_error_labels, video_lengths_id, \
-            error_descriptions, id2num_dict, num2id_dict = get_gt(self.args.dataset, self.action2idx, self.args.split)
-        # convert all the errors to the same class (-1)
-        gt_error_labels[gt_error_labels > 0] = -1
-        gt_error_labels[gt_error_labels == 0] = 1
-
-        # if combine_bg:
-        #     bg_to_normal = [0, 1]
-        #     set_labels = [1, -1]
-        # else:
-        #     bg_to_normal = None
-        #     set_labels = [0, 1, -1]
-
-        
-
-        # sample 100 times
-        num_samples = 100
-        p_all, r_all, f1_all, acc_all = None, None, None, None
-        for i in range(num_samples):
-            labels = np.array([-1, 0, 1])
-            all_preds = np.random.choice(labels, size=len(gt_error_labels))
-            cp_gt_error_labels = np.copy(gt_error_labels)
-            acc, p, r, f1 = acc_precision_recall_f1(all_preds, cp_gt_error_labels)#, set_labels, eval_each_class, bg_to_normal)
-            if p_all is None:
-                p_all, r_all, f1_all, acc_all = p, r, f1, acc
-            else:
-                p_all += p
-                r_all += r
-                f1_all += f1
-                acc_all += acc
-        
-
-        p = p_all / num_samples
-        r = r_all / num_samples
-        f1 = f1_all / num_samples
-        acc = acc_all / num_samples
-
-        if eval_each_class:
-            for j in range(len(set_labels)):
-                print("|Error detection (Random, class %d)|%.3f|%.3f|%.3f|%.3f|"%(set_labels[j], p[j], r[j], f1[j], acc[j]))
-        else:
-            print("|Error detection (Random, macro)|%.3f|%.3f|%.3f|%.3f|"%(p, r, f1, acc))
-        
-        if is_visualize:
-            start = 0
-            end = 0 
-            for i in range(len(video_lengths_id)):
-                length, video_id = video_lengths_id[i]
-                end += length
-                pred_vis(gt_error_labels[start:end], all_preds[start:end], simplified_error_label_dict, './error_visualization/rrandom/ed_'+video_id, is_error=True)
-                start += length
-
 
 
 if __name__ == '__main__':
@@ -564,7 +495,6 @@ if __name__ == '__main__':
     parser.add_argument('--task', type=str, default='pinwheels')
     parser.add_argument('--fps', default=10, type=int)
     parser.add_argument('--split', type=str, default='test')
-    parser.add_argument('-er', '--eval-random', action='store_true')
     parser.add_argument('-as', '--action-segmentation', action='store_true', help='Evaluate action segmentation using cls head')
     parser.add_argument('-ed', '--error-detection', action='store_true')
     parser.add_argument('-od', '--omission-detection', action='store_true', help='always with flag --error')
@@ -575,10 +505,6 @@ if __name__ == '__main__':
 
     evaluator = ActionSegmentationErrorDetectionEvaluator(args)
 
-    if args.eval_random:
-        evaluator.evaluate_random_error_detection(eval_each_class=True, combine_bg=True)
-        evaluator.evaluate_random_error_detection(eval_each_class=False, combine_bg=True, is_visualize=args.visualize)
-    
     if args.action_segmentation:
         evaluator.micro_framewise_action_segmentation(eval_each_class=True)
         evaluator.micro_framewise_action_segmentation(eval_each_class=False, is_visualize=args.visualize)
