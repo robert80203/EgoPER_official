@@ -33,7 +33,7 @@ Run setup.py to generate the directories needed
 Visit our project page to see more details of our dataset.
 [TBD]()
 
-Please send an email with the following information to lee.shih@northeastern.edu for downloading our datasets and annotations.
+Please send an email with the following information to lee.shih@northeastern.edu for downloading our datasets and annotations. The shared link will be expired in two weeks.
 - Your Full Name
 - Institution/Organization
 - Advisor/Supervisor Name
