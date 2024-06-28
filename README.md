@@ -30,8 +30,7 @@ conda env create -f environment.yml
 
 Run setup.py to generate the directories needed
 
-Visit our project page to see more details of our dataset.
-[TBD]()
+Visit our [project page](https://www.khoury.northeastern.edu/home/eelhami/egoper.htm) to see more details of our dataset.
 
 Please send an email with the following information to lee.shih@northeastern.edu for downloading our datasets and annotations. The shared link will be expired in two weeks.
 - Your Full Name
