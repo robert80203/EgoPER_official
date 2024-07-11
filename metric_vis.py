@@ -212,9 +212,9 @@ class ActionSegmentationErrorDetectionEvaluator:
                 self.data_list = [line.strip('\n') for line in lines]
             with open(os.path.join(root_dir, 'annotation.json'), 'r') as fp:
                 all_annot = json.load(fp)
-            with open(os.path.join(root_dir, 'action_step.json'), 'r') as fp:
-                # all_step_annot = json.load(fp)
-                self.step_annotations = json.load(fp)[task]
+            # with open(os.path.join(root_dir, 'action_step.json'), 'r') as fp:
+            #     # all_step_annot = json.load(fp)
+            #     self.step_annotations = json.load(fp)[task]
             # step_annot = all_step_annot[task]
             # for i in range(len(step_annot)):
             #     video_id = step_annot[i]['video_id']
@@ -472,20 +472,20 @@ class ActionSegmentationErrorDetectionEvaluator:
         print("|Action segmentation|IoU:%.1f|edit:%.1f|F1@0.5:%.1f|Acc:%.1f|"%(out['IoU']*100, out['edit']*100, out['F1@0.50']*100, out['acc']*100))
 
     # haven't updated
-    def omission_detection(self):
+    # def omission_detection(self):
         
-        with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, 'eval_results.pkl'), "rb") as f:
-            results = pickle.load(f)
+    #     with open(os.path.join('ckpt', self.args.dataset, self.args.dirname, 'eval_results.pkl'), "rb") as f:
+    #         results = pickle.load(f)
 
-        all_pred_action_labels = []
-        all_gt_action_labels = []
-        for video_id in self.data_list:
-            gt_segments, gt_labels, gt_label_types, gt_des = self.annotations[video_id]
-            labels = torch.tensor(results[video_id]['label'])
-            all_pred_action_labels.append(labels.numpy())
-            all_gt_action_labels.append(self.step_annotations[video_id])
+    #     all_pred_action_labels = []
+    #     all_gt_action_labels = []
+    #     for video_id in self.data_list:
+    #         gt_segments, gt_labels, gt_label_types, gt_des = self.annotations[video_id]
+    #         labels = torch.tensor(results[video_id]['label'])
+    #         all_pred_action_labels.append(labels.numpy())
+    #         all_gt_action_labels.append(self.step_annotations[video_id])
 
-        eval_omission_error(self.args.task, all_pred_action_labels, all_gt_action_labels)
+    #     eval_omission_error(self.args.task, all_pred_action_labels, all_gt_action_labels)
 
 
 if __name__ == '__main__':
@@ -497,7 +497,7 @@ if __name__ == '__main__':
     parser.add_argument('--split', type=str, default='test')
     parser.add_argument('-as', '--action-segmentation', action='store_true', help='Evaluate action segmentation using cls head')
     parser.add_argument('-ed', '--error-detection', action='store_true')
-    parser.add_argument('-od', '--omission-detection', action='store_true', help='always with flag --error')
+    # parser.add_argument('-od', '--omission-detection', action='store_true', help='always with flag --error')
     parser.add_argument('--threshold', default=-100.0, type=float, help='If set to 0.0, plot the curve and fine the best threshold')
     parser.add_argument('-vis', '--visualize', action='store_true')
     
@@ -565,5 +565,5 @@ if __name__ == '__main__':
 
             print('|%s|EDA: %.1f|Micro AUC: %.1f|Macro AUC: %.1f|'%(args.dirname, np.array(eda_list).mean() * 100, micro_auc_value * 100, macro_auc_value * 100))
 
-    if args.omission_detection:
-        evaluator.omission_detection()
+    # if args.omission_detection:
+    #     evaluator.omission_detection()
