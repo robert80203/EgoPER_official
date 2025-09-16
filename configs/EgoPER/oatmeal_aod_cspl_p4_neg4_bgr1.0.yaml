@@ -4,7 +4,7 @@ val_split: validation
 test_split: test
 model_name: LocPointTransformer_CSPL_GCN
 dataset: {
-  num_classes: 12,
+  num_classes: 16,
   trunc_thresh: 0.5,
   crop_ratio: [0.9, 1.0],
   max_seq_len: 2304,

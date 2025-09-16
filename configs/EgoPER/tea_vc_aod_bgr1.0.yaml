@@ -4,19 +4,20 @@ val_split: validation
 test_split: test
 model_name: LocPointTransformer_CSPL_GCN
 dataset: {
-  num_classes: 16,
+  num_classes: 11,
   trunc_thresh: 0.5,
   crop_ratio: [0.9, 1.0],
   max_seq_len: 2304,
   background_ratio: 1.0,
   use_gcn: True,
-  task: oatmeal
+  task: tea
 }
 model: {
   fpn_type: identity,
   backbone_type: convGCNTransformer,
   max_buffer_len_factor: 6.0,
   n_mha_win_size: 19,
+  input_dim: 256,
 }
 opt: {
   learning_rate: 0.001,

@@ -17,6 +17,7 @@ model: {
   backbone_type: convGCNTransformer,
   max_buffer_len_factor: 6.0,
   n_mha_win_size: 19,
+  input_dim: 256,
 }
 opt: {
   learning_rate: 0.001,

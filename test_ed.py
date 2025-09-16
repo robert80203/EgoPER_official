@@ -19,6 +19,57 @@ from libs.modeling import make_meta_arch
 from libs.datasets import make_dataset, make_data_loader, to_frame_wise, to_segments
 from libs.utils import valid_one_epoch, fix_random_seed
 
+
+def load_text_feature(dataset_name, task):
+    import os
+    root_data_dir = "/mnt/raptor/datasets"
+    with open(os.path.join(root_data_dir, dataset_name, "CaptainCook4D_shihpo", task, "chatgpt4omini_error.txt"), "r") as fp:
+        error_list = fp.readlines()
+
+    with open(os.path.join(root_data_dir, dataset_name, "CaptainCook4D_shihpo", task, "normal_actions.txt"), "r") as fp:
+        normal_action_list = fp.readlines()
+    
+
+    action_error_dict = {}
+    for error in error_list:
+        name, des = error.split(" ")
+        _, action, _, action_type, err_idx = name.split("_")
+        action = int(action)
+        action_type = int(action_type)
+
+        feature = np.load(os.path.join(root_data_dir, dataset_name, "CaptainCook4D_shihpo", task, "vc_chatgpt4omini_error_features", name+".npy"))
+        feature = torch.from_numpy(feature).float()
+
+        if action not in action_error_dict:
+            action_error_dict[action] = {}
+        
+        if action_type not in action_error_dict[action]:
+            action_error_dict[action][action_type] = []
+
+        action_error_dict[action][action_type].append(feature)
+
+    # average all the error feature (simple method)
+    merge_action_error_dict = {}
+    for k, v in action_error_dict.items():
+        merge_action_error_dict[k] = {}
+        for s_k, s_v in action_error_dict[k].items():
+            # self.merge_action_error_dict[k][s_k] = torch.stack(s_v)
+            merge_action_error_dict[k][s_k] = torch.stack(s_v).mean(0)
+
+    
+    normal_action_dict = {}
+    for normal_action in normal_action_list:
+        name, des = normal_action.split(" ")
+        _, action = name.split("_")
+
+        feature = np.load(os.path.join(root_data_dir, dataset_name, "CaptainCook4D_shihpo", task, "vc_normal_action_features", name+".npy"))
+        feature = torch.from_numpy(feature).float()
+
+        if action not in normal_action_dict:
+            normal_action_dict[int(action)] = feature
+    
+    return merge_action_error_dict, normal_action_dict
+
 ################################################################################
 def main(args):
     """0. load config"""
@@ -104,6 +155,9 @@ def main(args):
     """Test the model on the validation set"""
     model.eval()
     
+    if args.mode == "error_recognition":
+        merge_action_error_dict, normal_action_dict = load_text_feature(cfg['dataset_name'], cfg['dataset']['task'])
+
     # loop over training set
     for iter_idx, video_list in enumerate(train_loader, 0):
         with torch.no_grad():
@@ -141,12 +195,14 @@ def main(args):
 
     print('Validation set done!')
 
-    for ratio in range(-20, 21):
+    #for ratio in range(-20, 21):
+    for ratio in range(0, 1):
         results = {
             'video-id': [],
             't-start' : [],
             't-end': [],
             'label': [],
+            'type_label': [],
             'score': []
         }
         threshold = ratio / 10
@@ -170,8 +226,15 @@ def main(args):
                     video_list[vid_idx]['segments'] = torch.tensor(time_stamp_labels)
                     video_list[vid_idx]['labels'] = torch.tensor(action_labels).long()
 
-                # perform error detection
-                output = model(video_list, mode=args.mode, threshold=threshold)
+                
+                if args.mode == "error_recognition":
+                    # perform error recognition
+                    output = model(video_list, mode="error_recognition", threshold=threshold, error_dict=merge_action_error_dict, normal_dict=normal_action_dict)
+                else:
+                    # perform error detection
+                    output = model(video_list, mode=args.mode, threshold=threshold)
+                
+               
 
                 num_vids = len(output)
                 for vid_idx in range(num_vids):
@@ -182,6 +245,8 @@ def main(args):
                         results[video_id]['segments'] = output[vid_idx]['segments'].numpy()
                         results[video_id]['label'] = output[vid_idx]['labels'].numpy()
                         results[video_id]['score'] = output[vid_idx]['scores'].numpy()
+                        if args.mode == "error_recognition":
+                            results[video_id]['type_label'] = output[vid_idx]['type_labels'].numpy()
 
             # printing
             if (iter_idx != 0) and iter_idx % (print_freq) == 0:
@@ -189,6 +254,7 @@ def main(args):
                 print('Threshold:%.3f, Test: [%05d/%05d]\t'%(threshold, iter_idx, len(test_loader)))
 
         with open(output_file, "wb") as f:
+            print(output_file)
             pickle.dump(results, f)
     print('Test set done!')
 

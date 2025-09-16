@@ -54,6 +54,12 @@ def main(args):
     _ = fix_random_seed(0, include_cuda=True)
 
     """2. create dataset / dataloader"""
+    # val_dataset = make_dataset(
+    #         cfg['dataset_name'], False, cfg['train_split'], **cfg['dataset']
+    #     )
+    # val_dataset = make_dataset(
+    #         cfg['dataset_name'], False, cfg['val_split'], **cfg['dataset']
+    #     )
     val_dataset = make_dataset(
             cfg['dataset_name'], False, cfg['test_split'], **cfg['dataset']
         )
