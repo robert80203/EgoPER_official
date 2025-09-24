@@ -1,102 +1,60 @@
-# Error Detection on Egocentric Procedural Task Videos
-
-- [Preparation](#Preparation)
-- [Preprocessing](#Preprocessing)
-- [Training](#Training)
-- [Inference](#Inference)
-
-This is the official implementation of [Error Detection on Egocentric Procedural Task Videos](https://openaccess.thecvf.com/content/CVPR2024/papers/Lee_Error_Detection_in_Egocentric_Procedural_Task_Videos_CVPR_2024_paper.pdf)
-
-Please cite our CVPR 204 paper if our paper/implementation is helpful for your research:
-
-```
-@InProceedings{Lee_2024_CVPR,
-    author    = {Lee, Shih-Po and Lu, Zijia and Zhang, Zekun and Hoai, Minh and Elhamifar, Ehsan},
-    title     = {Error Detection in Egocentric Procedural Task Videos},
-    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-    month     = {June},
-    year      = {2024},
-    pages     = {18655-18666}
-}
-```
+# EgoPER Downstream Analysis
+This is ***modified*** [EgoPER](https://openaccess.thecvf.com/content/CVPR2024/papers/Lee_Error_Detection_in_Egocentric_Procedural_Task_Videos_CVPR_2024_paper.pdf) for ["What Changed and What Could Have Changed? State-Change Counterfactuals for Procedure-Aware Video Representation Learning"](https://arxiv.org/abs/2503.21055) for downstream analysis. Full credits for EgoPER goes to the original authors. For details about the methodoloty, please refer the original paper/ code.
 
 ## Preparation
-
-Setup the conda environment.
-
-```
-conda env create -f environment.yml
-```
-
-Run setup.py to generate the directories needed
-
-Visit our [project page](https://www.khoury.northeastern.edu/home/eelhami/egoper.htm) to see more details of our dataset.
-
-Please send an email with the following information to lee.shih@northeastern.edu for downloading our datasets and annotations. The shared link will be expired in two weeks.
-- Your Full Name
-- Institution/Organization
-- Advisor/Supervisor Name
-- Current Position/Title
-- Emaill Address (with institutional domain name)
-- Purpose
-
-Here are files information in the dataset.
-- Annotations
-    - annotation.json: the annotation file of 5 tasks, containing time stamps, step names, step decriptions, and action types.
-    - active_object.json: the annotation file of 5 tasks, containing frame-wise object and active object bounding boxes, categories, and if objects are active.
-- Dataset
-    - {task_name}_videos.zip: it contains trimmed RGB videos.
-    - {task_name}_other_modalities.zip it contains other modalities such as depth, audio, gaze, hand tracking, etc.
-    - training.txt, validation.txt, test.txt: the splits for training, validation, and test.
-    - trim_start_end.txt: the start and end time that we trimmed from the original videos.
-
-## Preprocessing
-
-Create a dataset folder for the task you want
-
-```
-mkdir data
-mkdir data/EgoPER
-mkdir data/EgoPER/pinwheels
-```
-
-Download annotation.json, active_object.json, mean.npy, and std.npy and put them under data/EgoPER
-
-Create a video and frame folder. Extract pinwheels_videos.zip into the video folder and extract frames from the videos.
-
-```
-mkdir data/EgoPER/pinwheels/frames_10fps
-mkdir data/EgoPER/pinwheels/trim_videos
-cd preprocessing
-python extract_frames.py
-```
-
-Generate I3D features based on the video frames with the [pre-trained weight](https://drive.google.com/file/d/1SF4NduQ7w08wP00IgftZjnRqRYRdppd6/view?usp=sharing)
-
-Move the weight under I3D_extractor/src/feature_extractor/pretrained_models.
-
-Change root_dir in features_{task_name}.sh to correct path, e.g., data/EgoPER/pinwheels and run
-
-```
-mkdir data/EgoPER/pinwheels/features_10fps
-cd I3D_extractor
-./features_pin.sh
-```
+For preparation, please follow the original [EgoPER code](https://github.com/robert80203/EgoPER_official).
 
 ## Training
+Train model using features extracted from different feature extractors. Depending on the feature extractor, the feature dimension can change, so we added user argument to take dynamic feature size in `train.py`.
 
-- Modify root_dir in libs/datasets/egoper.py to the correct directory. 
-- The action segmentation backbone is ActionFormer
-- The number of protoypes of each step is 2
+### Notes
+Note that `train.py` in this repo is revised version from the origianl. The differences include that new train.py can...
+1. take dynamic `--input_dim` user argument to compare different models
+2. take `--cp_dir` for different checkpoint directories
+3. take `--seed` for random seed
 
+### How-to-run
+#### train.py
+`Stage 1 Trainig`
 ```
-./run_EgoPER_train.sh
+python train.py {config_yaml_file} --output {output_name} --feat_dirname {saved_feature_path} --input_dim {input_feature_dimension} --cp_dir {save_checkpoint_dir} --seed {random_seed}
+```
+Example:
+```
+python train_others.py ./configs/EgoPER/tea_aod_bgr1.0.yaml --output final_output --feat_dirname features_method1 --input_dim 768 --cp_dir ./ckpt/method1 --data_root_dir ./data
 ```
 
-
-## Inference
-- The code will evaluation the performance of action segmentation and error detection.
-
+`Stage 2 Training`
 ```
-./run_EgoPER_eval.sh
+python train.py {config_yaml_file} --resume {saved_model_weight_path} --output {output_name} --feat_dirname {saved_feature_path} --input_dim {input_feature_dimension} --cp_dir {save_checkpoint_dir}
+```
+Example:
+```
+python train.py ./configs/EgoPER/tea_aod_cspl_p2_neg2_bgr1.0.yaml --resume ./ckpt/method1/tea_aod_bgr1.0_final/epoch_105.pth.tar --output final_output --feat_dirname features_method1 --input_dim 768 --cp_dir ./ckpt/method1 --data_root_dir ./data
+```
+
+## Testing
+Same as training, feature dimension can vary depending on the feature extraction method, so we added `--input_dim` user argument in `test_ed.py` and `test.py`.
+
+### Notes
+Note that this is also different from the original code (takes `--input_dim` to compare multiple models).
+
+### How-to-run
+#### test.py
+This runs test evaluation script for action segmentation.
+```
+python test.py {config_yaml_file} {saved_checkpoint_dir} --feat_dirname {input_feature_dimension} --data_root_dir {data_root_directory}
+```
+Example:
+```
+python test.py ./configs/EgoPER/tea_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/method1/tea_aod_cspl_p2_neg2_bgr1.0_final --feat_dirname features_method1 --data_root_dir ./data
+```
+#### test_ed.py
+This runs test evaluation script for error detection.
+```
+python test_ed.py {config_yaml_file} {saved_checkpoint_dir} --feat_dirname {input_feature_dimension} --data_root_dir {data_root_directory}
+```
+Example:
+```
+python test_ed.py ./configs/EgoPER/tea_aod_cspl_p2_neg2_bgr1.0.yaml ./ckpt/method1/tea_aod_cspl_p2_neg2_bgr1.0_final --feat_dirname features_method1 --data_root_dir ./data
 ```

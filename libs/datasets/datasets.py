@@ -14,6 +14,7 @@ def make_dataset(name, is_training, split, **kwargs):
    """
        A simple dataset builder
    """
+   print(datasets[name])
    dataset = datasets[name](is_training, split, **kwargs)
    return dataset
 

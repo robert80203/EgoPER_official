@@ -25,9 +25,17 @@ class EgoPERdataset(Dataset):
         num_node,           # num of nodes in a graph
         use_gcn,            # if using AOD
         task,               # task name
+        ###########
+        #-- Changes here
+        feat_dirname: str = 'feature_10fps',
+        data_root_dir: str = './data'
+        ###########
     ):
-
-        root_dir = '/mnt/raptor/datasets/EgoPER'
+        ##############
+        # changes here
+        # root_dir = '/mnt/raptor/datasets/EgoPER'
+        root_dir = data_root_dir
+        ##############
         self.split = split
         self.is_training = is_training
         self.default_fps = default_fps
@@ -39,9 +47,13 @@ class EgoPERdataset(Dataset):
         self.use_gcn = use_gcn
         self.bg_idx = 0
         self.annotations = {}
-
-        self.feat_path = os.path.join(root_dir, task, 'features_10fps')
-
+        
+        ##############
+        # changes here
+        print(f'Using feature directory: {feat_dirname}')
+        # self.feat_path = os.path.join(root_dir, task, 'features_10fps')
+        self.feat_path = os.path.join(root_dir, task, feat_dirname)
+        ##############
         
         with open(os.path.join(root_dir, task, self.split+'.txt'), 'r') as fp:
             lines = fp.readlines()

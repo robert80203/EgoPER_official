@@ -53,14 +53,14 @@ def main(args):
 
     """2. create dataset / dataloader"""
     train_dataset = make_dataset(
-        cfg['dataset_name'], False, cfg['train_split'], **cfg['dataset']
+        cfg['dataset_name'], False, cfg['train_split'], feat_dirname = args.feat_dirname, data_root_dir = args.data_root_dir, **cfg['dataset']
     )
     # set bs = 1, and disable shuffle
     train_loader = make_data_loader(
         train_dataset, False, None, 1, cfg['loader']['num_workers']
     )
     val_dataset = make_dataset(
-        cfg['dataset_name'], False, cfg['val_split'], **cfg['dataset']
+        cfg['dataset_name'], False, cfg['val_split'], feat_dirname = args.feat_dirname, data_root_dir = args.data_root_dir, **cfg['dataset']
     )
     # set bs = 1, and disable shuffle
     val_loader = make_data_loader(
@@ -68,7 +68,7 @@ def main(args):
     )
 
     test_dataset = make_dataset(
-        cfg['dataset_name'], False, cfg['test_split'], **cfg['dataset']
+        cfg['dataset_name'], False, cfg['test_split'], feat_dirname = args.feat_dirname, data_root_dir = args.data_root_dir, **cfg['dataset']
     )
     # set bs = 1, and disable shuffle
     test_loader = make_data_loader(
@@ -77,6 +77,8 @@ def main(args):
 
     """3. create model and evaluator"""
     # model
+    cfg['model']['input_dim'] = args.input_dim
+    cfg['devices'] = ['cuda:0']
     model = make_meta_arch(cfg['model_name'], **cfg['model'])
     
     # model.init_prototypes()
@@ -106,6 +108,9 @@ def main(args):
     
     # loop over training set
     for iter_idx, video_list in enumerate(train_loader, 0):
+        if video_list[0]['feats'].shape[1] != video_list[0]['edge_map'].shape[0]:
+            continue
+
         with torch.no_grad():
             output = model(video_list)
             # initialize the step prototypes
@@ -125,6 +130,9 @@ def main(args):
     print('Size of validation set:', len(val_loader))
 
     for iter_idx, video_list in enumerate(val_loader, 0):
+        if video_list[0]['feats'].shape[1] != video_list[0]['edge_map'].shape[0]:
+            continue
+
         with torch.no_grad():
             output = model(video_list)
             num_vids = len(output)
@@ -154,6 +162,9 @@ def main(args):
 
         # loop over test set
         for iter_idx, video_list in enumerate(test_loader, 0):
+            if video_list[0]['feats'].shape[1] != video_list[0]['edge_map'].shape[0]:
+                continue
+
             # forward the model (wo. grad)
             with torch.no_grad():
                 
@@ -214,6 +225,15 @@ if __name__ == '__main__':
                         help='print frequency (default: 20 iterations)')
     parser.add_argument('--threshold', default=0.5, type=float)
     parser.add_argument('--mode', default='similarity', type=str)  
-    parser.add_argument('--score', action='store_true')       
+    parser.add_argument('--score', action='store_true')    
+    parser.add_argument('--feat_dirname', default='feature_10fps', type=str,
+                        help='feature directory name')
+    ###########
+    #-- Changes here
+    parser.add_argument('--input_dim', default = 768, type = int,
+                       help = 'feature input dimension')
+    parser.add_argument('--data_root_dir', default = './data', type = str,
+                       help = 'data root directory')
+    ###########
     args = parser.parse_args()
     main(args)

@@ -28,7 +28,6 @@ from libs.utils import (train_one_epoch, valid_one_epoch,
 ################################################################################
 def main(args):
     """main function that handles training / inference"""
-
     """1. setup parameters / folders"""
     # parse args
     args.start_epoch = 0
@@ -39,8 +38,11 @@ def main(args):
     pprint(cfg)
 
     # prep for output folder (based on time stamp)
-    if not os.path.exists(cfg['output_folder']):
-        os.mkdir(cfg['output_folder'])
+    #########################
+    ####-- Commented this out
+    # if not os.path.exists(cfg['output_folder']):
+    #     os.mkdir(cfg['output_folder'])
+    #########################
     cfg_filename = os.path.basename(args.config).replace('.yaml', '')
     if len(args.output) == 0:
         ts = datetime.datetime.fromtimestamp(int(time.time()))
@@ -49,21 +51,26 @@ def main(args):
     else:
         ckpt_folder = os.path.join(
             cfg['output_folder'], cfg_filename + '_' + str(args.output))
+    ckpt_folder = os.path.join(args.cp_dir, cfg_filename + '_' + str(args.output))
+    print(ckpt_folder)
+    # ./ckpt/EgoPER/oatmeal_aod_bgr1.0_final
+    print('checkpoint_dir: ', ckpt_folder)
     if not os.path.exists(ckpt_folder):
-        os.mkdir(ckpt_folder)
+        os.makedirs(ckpt_folder, exist_ok = True)
     # tensorboard writer
     tb_writer = SummaryWriter(os.path.join(ckpt_folder, 'logs'))
 
     # fix the random seeds (this will fix everything)
-    rng_generator = fix_random_seed(cfg['init_rand_seed'], include_cuda=True)
+    # rng_generator = fix_random_seed(cfg['init_rand_seed'], include_cuda=True)
+    rng_generator = fix_random_seed(args.seed, include_cuda=True) # change to other seed! - 5/11
 
     # re-scale learning rate / # workers based on number of GPUs
     cfg['opt']["learning_rate"] *= len(cfg['devices'])
     cfg['loader']['num_workers'] *= len(cfg['devices'])
-
+    
     """2. create dataset / dataloader"""
     train_dataset = make_dataset(
-        cfg['dataset_name'], True, cfg['train_split'], **cfg['dataset']
+        cfg['dataset_name'], True, cfg['train_split'], feat_dirname = args.feat_dirname, data_root_dir = args.data_root_dir, **cfg['dataset']
     )
 
     # data loaders
@@ -71,11 +78,12 @@ def main(args):
         train_dataset, True, rng_generator, **cfg['loader'])
 
     """3. create model, optimizer, and scheduler"""
+    cfg['model']['input_dim'] = args.input_dim
+    cfg['devices'] = ['cuda:0']
     # model
     model = make_meta_arch(cfg['model_name'], **cfg['model'])
     if cfg['model']['train_cfg']['contrastive']:
         model.init_prototypes()
-
 
     # not ideal for multi GPU training, ok for now
     model = nn.DataParallel(model, device_ids=cfg['devices'])
@@ -159,8 +167,6 @@ def main(args):
                     file_name='epoch_{:03d}.pth.tar'.format(epoch + 1)
                 )
             
-            
-            
     # wrap up
     tb_writer.close()
     print("All done!")
@@ -184,5 +190,18 @@ if __name__ == '__main__':
                         help='name of exp folder (default: none)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='path to a checkpoint (default: none)')
+    parser.add_argument('--feat_dirname', default='feature_10fps', type=str,
+                        help='feature directory name')
+    ###########
+    #-- Changes here
+    parser.add_argument('--input_dim', default = 768, type = int,
+                       help = 'feature input dimension')
+    parser.add_argument('--cp_dir', default = 'temp', type = str,
+                       help = 'checkpoint directory')
+    parser.add_argument('--seed', default = 0, type = int,
+                       help = 'random seed')
+    parser.add_argument('--data_root_dir', default = './data', type = str,
+                       help = 'data root directory')
+    ###########
     args = parser.parse_args()
     main(args)

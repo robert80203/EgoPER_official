@@ -55,7 +55,7 @@ def main(args):
 
     """2. create dataset / dataloader"""
     val_dataset = make_dataset(
-            cfg['dataset_name'], False, cfg['test_split'], **cfg['dataset']
+            cfg['dataset_name'], False, cfg['test_split'], feat_dirname = args.feat_dirname, data_root_dir = args.data_root_dir, **cfg['dataset']
         )
     # set bs = 1, and disable shuffle
     val_loader = make_data_loader(
@@ -64,6 +64,8 @@ def main(args):
 
     """3. create model and evaluator"""
     # model
+    cfg['model']['input_dim'] = args.input_dim
+    cfg['devices'] = ['cuda:0']
     model = make_meta_arch(cfg['model_name'], **cfg['model'])
     # not ideal for multi GPU training, ok for now
     model = nn.DataParallel(model, device_ids=cfg['devices'])
@@ -121,5 +123,14 @@ if __name__ == '__main__':
                         help='max number of output actions (default: -1)')
     parser.add_argument('-p', '--print-freq', default=10, type=int,
                         help='print frequency (default: 10 iterations)')
+    parser.add_argument('--feat_dirname', default='feature_10fps', type=str,
+                        help='feature directory name')
+    ###########
+    #-- Changes here
+    parser.add_argument('--input_dim', default = 768, type = int,
+                       help = 'feature input dimension')
+    parser.add_argument('--data_root_dir', default = './data', type = str,
+                       help = 'data root directory')
+    ###########
     args = parser.parse_args()
     main(args)
