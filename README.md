@@ -52,7 +52,7 @@ Please send an email with the following information to lee.shih@northeastern.edu
 - Institution/Organization
 - Advisor/Supervisor Name
 - Current Position/Title
-- Emaill Address (with institutional domain name)
+- Emaill Address (**please make sure your email address can access Microsoft OneDrive!**)
 - Purpose
 
 Here are files information in the dataset.
